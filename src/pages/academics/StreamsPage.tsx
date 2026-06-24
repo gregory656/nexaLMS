@@ -1,0 +1,310 @@
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { Plus, Search, Home, Layers, School, X, Edit2, Trash2 } from 'lucide-react';
+
+export default function StreamsPage() {
+    const { school } = useAuth();
+    const [streams, setStreams] = useState<any[]>([]);
+    const [grades, setGrades] = useState<any[]>([]);
+    const [classes, setClasses] = useState<any[]>([]);
+    const [years, setYears] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<'streams' | 'grades' | 'classes'>('streams');
+
+    // Modals
+    const [showStreamModal, setShowStreamModal] = useState(false);
+    const [showGradeModal, setShowGradeModal] = useState(false);
+    const [showClassModal, setShowClassModal] = useState(false);
+
+    // Forms
+    const [streamName, setStreamName] = useState('');
+    const [gradeName, setGradeName] = useState('');
+    const [gradeOrder, setGradeOrder] = useState('1');
+    const [classGradeId, setClassGradeId] = useState('');
+    const [classStreamId, setClassStreamId] = useState('');
+    const [classYearId, setClassYearId] = useState('');
+
+    const fetchAll = async () => {
+        if (!school?.id) return;
+        setLoading(true);
+        const [strRes, graRes, clsRes, yrRes] = await Promise.all([
+            supabase.from('streams').select('*').eq('school_id', school.id).order('name'),
+            supabase.from('grade_levels').select('*').eq('school_id', school.id).order('level_order'),
+            supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id),
+            supabase.from('academic_years').select('*').eq('school_id', school.id).order('is_current', { ascending: false }),
+        ]);
+        setStreams(strRes.data || []);
+        setGrades(graRes.data || []);
+        setClasses(clsRes.data || []);
+        setYears(yrRes.data || []);
+        setLoading(false);
+
+        if (yrRes.data?.[0]) setClassYearId(yrRes.data[0].id);
+    };
+
+    useEffect(() => { fetchAll(); }, [school?.id]);
+
+    const handleAddStream = async () => {
+        if (!streamName.trim()) return;
+        await supabase.from('streams').insert({ name: streamName, school_id: school!.id });
+        setStreamName('');
+        setShowStreamModal(false);
+        fetchAll();
+    };
+
+    const handleAddGrade = async () => {
+        if (!gradeName.trim()) return;
+        await supabase.from('grade_levels').insert({
+            name: gradeName,
+            level_order: parseInt(gradeOrder),
+            school_id: school!.id
+        });
+        setGradeName('');
+        setShowGradeModal(false);
+        fetchAll();
+    };
+
+    const handleAddClass = async () => {
+        if (!classGradeId || !classStreamId || !classYearId) return;
+
+        const grade = grades.find(g => g.id === classGradeId);
+        const stream = streams.find(s => s.id === classStreamId);
+        const name = `${grade.name}${stream.name.charAt(0)}`;
+
+        await supabase.from('classes').insert({
+            school_id: school!.id,
+            grade_level_id: classGradeId,
+            stream_id: classStreamId,
+            academic_year_id: classYearId,
+            name: name
+        });
+
+        setShowClassModal(false);
+        fetchAll();
+    };
+
+    return (
+        <>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">Academic Structure</h1>
+                    <p className="page-subtitle">Manage your school's streams, grades, and class groups</p>
+                </div>
+                <div className="flex gap-2">
+                    {activeTab === 'streams' && (
+                        <button className="btn btn-primary" onClick={() => setShowStreamModal(true)}>
+                            <Plus size={18} /> New Stream
+                        </button>
+                    )}
+                    {activeTab === 'grades' && (
+                        <button className="btn btn-primary" onClick={() => setShowGradeModal(true)}>
+                            <Plus size={18} /> New Grade Level
+                        </button>
+                    )}
+                    {activeTab === 'classes' && (
+                        <button className="btn btn-primary" onClick={() => setShowClassModal(true)}>
+                            <Plus size={18} /> Generate Class Groups
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="tabs">
+                <div className={`tab ${activeTab === 'streams' ? 'active' : ''}`} onClick={() => setActiveTab('streams')}>
+                    <Home size={16} /> Streams
+                </div>
+                <div className={`tab ${activeTab === 'grades' ? 'active' : ''}`} onClick={() => setActiveTab('grades')}>
+                    <Layers size={16} /> Grade Levels
+                </div>
+                <div className={`tab ${activeTab === 'classes' ? 'active' : ''}`} onClick={() => setActiveTab('classes')}>
+                    <School size={16} /> Classes
+                </div>
+            </div>
+
+            <div className="card">
+                {loading ? (
+                    <div className="flex justify-center p-8"><span className="spinner" /></div>
+                ) : (
+                    <>
+                        {activeTab === 'streams' && (
+                            <div className="grid-4">
+                                {streams.map(s => (
+                                    <div key={s.id} className="card" style={{ background: 'var(--gray-50)', textAlign: 'center' }}>
+                                        <Home size={24} style={{ color: 'var(--green-600)', margin: '0 auto 0.5rem' }} />
+                                        <h4 className="font-bold">{s.name}</h4>
+                                        <p className="text-xs text-muted mt-1">Stream</p>
+                                    </div>
+                                ))}
+                                {streams.length === 0 && <div className="empty-state" style={{ gridColumn: 'span 4' }}><h3>No streams added</h3></div>}
+                            </div>
+                        )}
+
+                        {activeTab === 'grades' && (
+                            <div className="table-wrapper">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Order</th>
+                                            <th>Grade Level</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {grades.map(g => (
+                                            <tr key={g.id}>
+                                                <td>{g.level_order}</td>
+                                                <td><strong>{g.name}</strong></td>
+                                                <td><button className="btn btn-ghost btn-sm"><Edit2 size={14} /></button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {activeTab === 'classes' && (
+                            <div className="table-wrapper">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Class Name</th>
+                                            <th>Grade Level</th>
+                                            <th>Stream</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {classes.map(c => (
+                                            <tr key={c.id}>
+                                                <td><strong>{c.name}</strong></td>
+                                                <td>{c.grade_levels?.name}</td>
+                                                <td>{c.streams?.name}</td>
+                                                <td>
+                                                    <button className="btn btn-ghost btn-sm"><Edit2 size={14} /></button>
+                                                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {classes.length === 0 && (
+                                    <div className="empty-state">
+                                        <h3>No class groups generated</h3>
+                                        <p>Combine grades and streams to create classes for students</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            {/* Stream Modal */}
+            {showStreamModal && (
+                <div className="modal-overlay" onClick={() => setShowStreamModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Add New Stream</h3>
+                            <button className="modal-close" onClick={() => setShowStreamModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Stream Name</label>
+                                <input
+                                    className="form-input"
+                                    placeholder="e.g. East, West, Green, Blue"
+                                    value={streamName}
+                                    onChange={e => setStreamName(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowStreamModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleAddStream}>Save Stream</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Grade Modal */}
+            {showGradeModal && (
+                <div className="modal-overlay" onClick={() => setShowGradeModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Add Grade Level</h3>
+                            <button className="modal-close" onClick={() => setShowGradeModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Grade Name</label>
+                                <input
+                                    className="form-input"
+                                    placeholder="e.g. Form 1, Grade 4"
+                                    value={gradeName}
+                                    onChange={e => setGradeName(e.target.value)}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Level Order (for sorting)</label>
+                                <input
+                                    className="form-input"
+                                    type="number"
+                                    value={gradeOrder}
+                                    onChange={e => setGradeOrder(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowGradeModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleAddGrade}>Save Grade</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Class Modal */}
+            {showClassModal && (
+                <div className="modal-overlay" onClick={() => setShowClassModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Generate Class Group</h3>
+                            <button className="modal-close" onClick={() => setShowClassModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <p className="text-sm text-muted mb-4">Combine a grade level and a stream to create a new class.</p>
+                            <div className="form-group">
+                                <label className="form-label">Select Grade Level</label>
+                                <select className="form-select" value={classGradeId} onChange={e => setClassGradeId(e.target.value)}>
+                                    <option value="">Select Grade</option>
+                                    {grades.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Select Stream</label>
+                                <select className="form-select" value={classStreamId} onChange={e => setClassStreamId(e.target.value)}>
+                                    <option value="">Select Stream</option>
+                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Academic Year</label>
+                                <select className="form-select" value={classYearId} onChange={e => setClassYearId(e.target.value)}>
+                                    {years.map(y => <option key={y.id} value={y.id}>{y.name} {y.is_current ? '(Current)' : ''}</option>)}
+                                </select>
+                                {years.length === 0 && <p className="form-hint text-danger">⚠️ Add an Academic Year first in Settings</p>}
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowClassModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleAddClass} disabled={!classGradeId || !classStreamId}>
+                                Create Class Group
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}

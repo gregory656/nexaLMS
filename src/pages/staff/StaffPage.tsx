@@ -1,0 +1,277 @@
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
+import { Plus, Search, MoreVertical, Shield, UserCog, Mail, Phone, X, Trash2, Edit2 } from 'lucide-react';
+
+export default function StaffPage() {
+    const { school } = useAuth();
+    const [staff, setStaff] = useState<any[]>([]);
+    const [roles, setRoles] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [showRoleModal, setShowRoleModal] = useState(false);
+    const [selectedStaff, setSelectedStaff] = useState<any>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+    const [form, setForm] = useState({
+        first_name: '', last_name: '', email: '', phone: '', gender: '',
+        tsc_number: '', id_number: '', qualification: '', employment_type: 'permanent',
+    });
+
+    const [assignedRoleIds, setAssignedRoleIds] = useState<string[]>([]);
+    const [saving, setSaving] = useState(false);
+
+    const fetchStaff = async () => {
+        if (!school?.id) return;
+        setLoading(true);
+        const { data: staffData } = await supabase
+            .from('teachers')
+            .select('*, user_roles(role_id, roles(display_name))')
+            .eq('school_id', school.id)
+            .order('first_name');
+
+        const { data: rolesData } = await supabase
+            .from('roles')
+            .select('*')
+            .eq('school_id', school.id);
+
+        setStaff(staffData || []);
+        setRoles(rolesData || []);
+        setLoading(false);
+    };
+
+    useEffect(() => { fetchStaff(); }, [school?.id]);
+
+    const handleSave = async () => {
+        if (!form.first_name.trim()) return;
+        setSaving(true);
+        const teacherData = { ...form, school_id: school!.id };
+
+        if (selectedStaff && !showRoleModal) {
+            await supabase.from('teachers').update(teacherData).eq('id', selectedStaff.id);
+        } else {
+            await supabase.from('teachers').insert(teacherData);
+        }
+
+        setShowModal(false);
+        fetchStaff();
+        setSaving(false);
+    };
+
+    const openRoleAssignment = (member: any) => {
+        setSelectedStaff(member);
+        const existingRoles = member.user_roles?.map((ur: any) => ur.role_id) || [];
+        setAssignedRoleIds(existingRoles);
+        setShowRoleModal(true);
+        setMenuOpen(null);
+    };
+
+    const handleToggleRole = (roleId: string) => {
+        setAssignedRoleIds(prev =>
+            prev.includes(roleId) ? prev.filter(id => id !== roleId) : [...prev, roleId]
+        );
+    };
+
+    const saveRoles = async () => {
+        if (!selectedStaff?.user_id) {
+            alert("This staff member doesn't have a system user account yet. Only accounts can have roles.");
+            return;
+        }
+
+        setSaving(true);
+        // Delete existing roles for this user
+        await supabase.from('user_roles').delete().eq('user_id', selectedStaff.user_id);
+
+        // Insert new roles
+        if (assignedRoleIds.length > 0) {
+            const inserts = assignedRoleIds.map(roleId => ({
+                user_id: selectedStaff.user_id,
+                role_id: roleId
+            }));
+            await supabase.from('user_roles').insert(inserts);
+        }
+
+        setShowRoleModal(false);
+        fetchStaff();
+        setSaving(false);
+    };
+
+    return (
+        <>
+            <div className="page-header">
+                <div>
+                    <h1 className="page-title">Staff & Teachers</h1>
+                    <p className="page-subtitle">Manage educators and administrative personnel</p>
+                </div>
+                <button className="btn btn-primary" onClick={() => { setSelectedStaff(null); setShowModal(true); }}>
+                    <Plus size={18} /> New Staff
+                </button>
+            </div>
+
+            <div className="card mb-4">
+                <div className="header-search" style={{ maxWidth: '320px' }}>
+                    <Search />
+                    <input
+                        type="text"
+                        placeholder="Search staff by name or email..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            <div className="card">
+                {loading ? <div className="flex justify-center p-8"><span className="spinner" /></div> : (
+                    <div className="table-wrapper">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Contact</th>
+                                    <th>TSC No.</th>
+                                    <th>Roles</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {staff.filter(s => `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())).map(member => (
+                                    <tr key={member.id}>
+                                        <td>
+                                            <div className="flex items-center gap-3">
+                                                <div className="sidebar-user-avatar">{member.first_name[0]}{member.last_name[0]}</div>
+                                                <div>
+                                                    <div className="font-semibold">{member.first_name} {member.last_name}</div>
+                                                    <div className="text-xs text-muted">{member.employment_type}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div className="text-sm"><Mail size={12} className="inline mr-1" /> {member.email || '—'}</div>
+                                            <div className="text-sm"><Phone size={12} className="inline mr-1" /> {member.phone || '—'}</div>
+                                        </td>
+                                        <td>{member.tsc_number || '—'}</td>
+                                        <td>
+                                            <div className="flex gap-1 flex-wrap">
+                                                {member.user_roles?.map((ur: any) => (
+                                                    <span key={ur.role_id} className="badge badge-blue">{ur.roles?.display_name}</span>
+                                                )) || <span className="text-xs text-muted">No roles</span>}
+                                            </div>
+                                        </td>
+                                        <td><span className="badge badge-green">{member.status}</span></td>
+                                        <td>
+                                            <div className="dropdown">
+                                                <button className="btn btn-ghost btn-sm" onClick={() => setMenuOpen(menuOpen === member.id ? null : member.id)}>
+                                                    <MoreVertical size={16} />
+                                                </button>
+                                                {menuOpen === member.id && (
+                                                    <div className="dropdown-menu">
+                                                        <button className="dropdown-item" onClick={() => openRoleAssignment(member)}>
+                                                            <Shield size={14} /> Assign Roles
+                                                        </button>
+                                                        <button className="dropdown-item" onClick={() => { setSelectedStaff(member); setShowModal(true); setMenuOpen(null); }}>
+                                                            <Edit2 size={14} /> Edit Info
+                                                        </button>
+                                                        <button className="dropdown-item" style={{ color: 'var(--danger)' }}>
+                                                            <Trash2 size={14} /> Remove
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* Staff Info Modal */}
+            {showModal && (
+                <div className="modal-overlay" onClick={() => setShowModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">{selectedStaff ? 'Edit Staff Member' : 'New Staff Member'}</h3>
+                            <button className="modal-close" onClick={() => setShowModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="grid-2">
+                                <div className="form-group">
+                                    <label className="form-label">First Name</label>
+                                    <input className="form-input" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Last Name</label>
+                                    <input className="form-input" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Email Address</label>
+                                <input className="form-input" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                            </div>
+                            <div className="grid-2">
+                                <div className="form-group">
+                                    <label className="form-label">Phone Number</label>
+                                    <input className="form-input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">TSC Number</label>
+                                    <input className="form-input" value={form.tsc_number} onChange={e => setForm({ ...form, tsc_number: e.target.value })} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>Save Staff Member</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Role Assignment Modal */}
+            {showRoleModal && (
+                <div className="modal-overlay" onClick={() => setShowRoleModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Assign Roles: {selectedStaff?.first_name}</h3>
+                            <button className="modal-close" onClick={() => setShowRoleModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <p className="text-sm text-muted mb-4">Select the administrative roles for this staff member.</p>
+                            <div className="flex flex-col gap-2">
+                                {roles.map(role => (
+                                    <label key={role.id} className="stat-card" style={{ cursor: 'pointer', padding: '0.75rem', gap: '0.75rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={assignedRoleIds.includes(role.id)}
+                                            onChange={() => handleToggleRole(role.id)}
+                                        />
+                                        <div style={{ flex: 1 }}>
+                                            <div className="font-semibold">{role.display_name}</div>
+                                            <div className="text-xs text-muted">{role.description}</div>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                            {roles.length === 0 && (
+                                <div className="text-center p-4">
+                                    <Shield size={32} style={{ color: 'var(--gray-300)', margin: '0 auto 1rem' }} />
+                                    <p className="text-sm text-muted">No roles defined for this school yet.</p>
+                                    <a href="/roles" className="btn btn-ghost btn-sm mt-2">Manage Roles</a>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowRoleModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={saveRoles} disabled={saving || !selectedStaff?.user_id}>
+                                {saving ? 'Saving...' : 'Update Roles'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+}
