@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Plus, Search, Home, Layers, School, X, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Home, Layers, School, X, Edit2, Trash2 } from 'lucide-react';
 
 export default function StreamsPage() {
     const { school } = useAuth();
@@ -24,6 +25,7 @@ export default function StreamsPage() {
     const [classGradeId, setClassGradeId] = useState('');
     const [classStreamId, setClassStreamId] = useState('');
     const [classYearId, setClassYearId] = useState('');
+    const [saving, setSaving] = useState(false);
 
     const fetchAll = async () => {
         if (!school?.id) return;
@@ -34,6 +36,7 @@ export default function StreamsPage() {
             supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id),
             supabase.from('academic_years').select('*').eq('school_id', school.id).order('is_current', { ascending: false }),
         ]);
+        [strRes.error, graRes.error, clsRes.error, yrRes.error].filter(Boolean).forEach(error => toast.error(error!.message));
         setStreams(strRes.data || []);
         setGrades(graRes.data || []);
         setClasses(clsRes.data || []);
@@ -47,41 +50,89 @@ export default function StreamsPage() {
 
     const handleAddStream = async () => {
         if (!streamName.trim()) return;
-        await supabase.from('streams').insert({ name: streamName, school_id: school!.id });
-        setStreamName('');
-        setShowStreamModal(false);
-        fetchAll();
+        setSaving(true);
+        const { error } = await supabase.from('streams').insert({ name: streamName.trim(), school_id: school!.id });
+        if (error) {
+            toast.error(error.message);
+        } else {
+            toast.success('Stream saved');
+            setStreamName('');
+            setShowStreamModal(false);
+            await fetchAll();
+        }
+        setSaving(false);
     };
 
     const handleAddGrade = async () => {
         if (!gradeName.trim()) return;
-        await supabase.from('grade_levels').insert({
-            name: gradeName,
-            level_order: parseInt(gradeOrder),
+        setSaving(true);
+        const { error } = await supabase.from('grade_levels').insert({
+            name: gradeName.trim(),
+            level_order: parseInt(gradeOrder, 10) || 1,
             school_id: school!.id
         });
-        setGradeName('');
-        setShowGradeModal(false);
-        fetchAll();
+        if (error) {
+            toast.error(error.message);
+        } else {
+            toast.success('Grade level saved');
+            setGradeName('');
+            setGradeOrder('1');
+            setShowGradeModal(false);
+            await fetchAll();
+        }
+        setSaving(false);
+    };
+
+    const ensureCurrentAcademicYear = async () => {
+        const current = years.find(y => y.is_current) || years[0];
+        if (current) return current.id;
+
+        const year = new Date().getFullYear();
+        const { data, error } = await supabase
+            .from('academic_years')
+            .insert({
+                school_id: school!.id,
+                name: String(year),
+                start_date: `${year}-01-01`,
+                end_date: `${year}-12-31`,
+                is_current: true,
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data.id;
     };
 
     const handleAddClass = async () => {
-        if (!classGradeId || !classStreamId || !classYearId) return;
+        if (!classGradeId || !classStreamId) return;
+        setSaving(true);
 
-        const grade = grades.find(g => g.id === classGradeId);
-        const stream = streams.find(s => s.id === classStreamId);
-        const name = `${grade.name}${stream.name.charAt(0)}`;
+        try {
+            const grade = grades.find(g => g.id === classGradeId);
+            const stream = streams.find(s => s.id === classStreamId);
+            const yearId = classYearId || await ensureCurrentAcademicYear();
+            const name = `${grade.name} ${stream.name}`.trim();
 
-        await supabase.from('classes').insert({
-            school_id: school!.id,
-            grade_level_id: classGradeId,
-            stream_id: classStreamId,
-            academic_year_id: classYearId,
-            name: name
-        });
+            const { error } = await supabase.from('classes').insert({
+                school_id: school!.id,
+                grade_level_id: classGradeId,
+                stream_id: classStreamId,
+                academic_year_id: yearId,
+                name
+            });
 
-        setShowClassModal(false);
-        fetchAll();
+            if (error) throw error;
+            toast.success('Class group created');
+            setShowClassModal(false);
+            setClassGradeId('');
+            setClassStreamId('');
+            await fetchAll();
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to create class group');
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -222,7 +273,9 @@ export default function StreamsPage() {
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowStreamModal(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleAddStream}>Save Stream</button>
+                            <button className="btn btn-primary" onClick={handleAddStream} disabled={saving || !streamName.trim()}>
+                                {saving ? <span className="spinner" /> : 'Save Stream'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -258,7 +311,9 @@ export default function StreamsPage() {
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowGradeModal(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleAddGrade}>Save Grade</button>
+                            <button className="btn btn-primary" onClick={handleAddGrade} disabled={saving || !gradeName.trim()}>
+                                {saving ? <span className="spinner" /> : 'Save Grade'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -293,13 +348,13 @@ export default function StreamsPage() {
                                 <select className="form-select" value={classYearId} onChange={e => setClassYearId(e.target.value)}>
                                     {years.map(y => <option key={y.id} value={y.id}>{y.name} {y.is_current ? '(Current)' : ''}</option>)}
                                 </select>
-                                {years.length === 0 && <p className="form-hint text-danger">⚠️ Add an Academic Year first in Settings</p>}
+                                {years.length === 0 && <p className="form-hint">A current academic year will be created automatically.</p>}
                             </div>
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowClassModal(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleAddClass} disabled={!classGradeId || !classStreamId}>
-                                Create Class Group
+                            <button className="btn btn-primary" onClick={handleAddClass} disabled={saving || !classGradeId || !classStreamId}>
+                                {saving ? <span className="spinner" /> : 'Create Class Group'}
                             </button>
                         </div>
                     </div>

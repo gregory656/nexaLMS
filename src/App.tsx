@@ -17,6 +17,7 @@ import StaffPage from './pages/staff/StaffPage';
 import GuardiansPage from './pages/guardians/GuardiansPage';
 import StreamsPage from './pages/academics/StreamsPage';
 import SubjectsPage from './pages/academics/SubjectsPage';
+import HousesPage from './pages/academics/HousesPage';
 import RolesPage from './pages/roles/RolesPage';
 import SubscriptionPage from './pages/subscription/SubscriptionPage';
 
@@ -86,7 +87,7 @@ export default function App() {
               {/* Academics */}
               <Route path="academics/streams" element={<StreamsPage />} />
               <Route path="academics/subjects" element={<SubjectsPage />} />
-              <Route path="academics/houses" element={<Placeholder title="Houses Management" />} />
+              <Route path="academics/houses" element={<HousesPage />} />
               <Route path="academics/years" element={<Placeholder title="Academic Years" />} />
               <Route path="academics/departments" element={<Placeholder title="Departments" />} />
               <Route path="academics/timetable" element={<Placeholder title="Timetable" />} />

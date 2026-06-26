@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { isValidKenyanPhone, normalizeKenyanPhone } from '../../lib/phone';
 import { Plus, Search, Filter, MoreVertical, Edit2, Trash2, X, Download } from 'lucide-react';
 
 export default function StudentsPage() {
@@ -8,6 +10,7 @@ export default function StudentsPage() {
     const [students, setStudents] = useState<any[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
     const [houses, setHouses] = useState<any[]>([]);
+    const [subjects, setSubjects] = useState<any[]>([]);
     const [guardians, setGuardians] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -19,7 +22,7 @@ export default function StudentsPage() {
 
     const blankForm = {
         first_name: '', last_name: '', other_names: '', gender: '',
-        date_of_birth: '', class_id: '', house_id: '', guardian_name: '',
+        date_of_birth: '', admission_date: '', class_id: '', house_id: '', guardian_name: '',
         guardian_phone: '', guardian_email: '', guardian_relationship: 'guardian',
         admission_number: '', previous_school: '', medical_info: '',
         special_needs: '', nationality: 'Kenyan', religion: '',
@@ -30,15 +33,18 @@ export default function StudentsPage() {
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const [stuRes, clsRes, housRes, guardRes] = await Promise.all([
+        const [stuRes, clsRes, housRes, subjRes, guardRes] = await Promise.all([
             supabase.from('students').select('*, classes(name), houses(name), guardians(first_name, last_name)').eq('school_id', school.id).order('created_at', { ascending: false }),
             supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
             supabase.from('houses').select('*').eq('school_id', school.id).order('name'),
+            supabase.from('subjects').select('*').eq('school_id', school.id).order('name'),
             supabase.from('guardians').select('*').eq('school_id', school.id).order('first_name'),
         ]);
+        [stuRes.error, clsRes.error, housRes.error, subjRes.error, guardRes.error].filter(Boolean).forEach(error => toast.error(error!.message));
         setStudents(stuRes.data || []);
         setClasses(clsRes.data || []);
         setHouses(housRes.data || []);
+        setSubjects(subjRes.data || []);
         setGuardians(guardRes.data || []);
         setLoading(false);
     };
@@ -47,8 +53,22 @@ export default function StudentsPage() {
 
     const update = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
 
+    const canAddStudents = classes.length > 0 && houses.length > 0 && subjects.length > 0;
+
     const handleSave = async () => {
-        if (!form.first_name.trim()) return;
+        if (!form.first_name.trim() || !form.last_name.trim()) return;
+        if (!canAddStudents) {
+            toast.error('Set up subjects, houses, streams, and classes before adding students.');
+            return;
+        }
+        if (!form.class_id || !form.house_id) {
+            toast.error('Select a class and house for this student.');
+            return;
+        }
+        if (!isValidKenyanPhone(form.guardian_phone)) {
+            toast.error('Use a valid Kenyan phone number, e.g. +254712345678.');
+            return;
+        }
         setSaving(true);
 
         try {
@@ -60,31 +80,35 @@ export default function StudentsPage() {
                 const gFirst = names[0] || '';
                 const gLast = names.slice(1).join(' ') || '';
 
-                // Check if guardian exists
+                const guardianPhone = normalizeKenyanPhone(form.guardian_phone);
+
                 const existing = guardians.find(g =>
                     g.first_name.toLowerCase() === gFirst.toLowerCase() &&
-                    g.last_name.toLowerCase() === gLast.toLowerCase()
+                    g.last_name.toLowerCase() === gLast.toLowerCase() &&
+                    (!guardianPhone || !g.phone || g.phone === guardianPhone)
                 );
 
                 if (existing) {
                     guardian_id = existing.id;
                     // Update guardian contact if provided
-                    if (form.guardian_phone || form.guardian_email) {
-                        await supabase.from('guardians').update({
-                            phone: form.guardian_phone || existing.phone,
+                    if (guardianPhone || form.guardian_email) {
+                        const { error } = await supabase.from('guardians').update({
+                            phone: guardianPhone || existing.phone,
                             email: form.guardian_email || existing.email,
                             relationship: form.guardian_relationship || existing.relationship,
                         }).eq('id', existing.id);
+                        if (error) throw error;
                     }
                 } else {
-                    const { data: newGuardian } = await supabase.from('guardians').insert({
+                    const { data: newGuardian, error } = await supabase.from('guardians').insert({
                         school_id: school!.id,
                         first_name: gFirst,
                         last_name: gLast,
-                        phone: form.guardian_phone,
+                        phone: guardianPhone || null,
                         email: form.guardian_email,
                         relationship: form.guardian_relationship as any,
                     }).select().single();
+                    if (error) throw error;
                     guardian_id = newGuardian?.id;
                 }
             }
@@ -100,6 +124,7 @@ export default function StudentsPage() {
                 house_id: form.house_id || null,
                 guardian_id,
                 admission_number: form.admission_number || null,
+                admission_date: form.admission_date || null,
                 previous_school: form.previous_school || null,
                 medical_info: form.medical_info || null,
                 special_needs: form.special_needs || null,
@@ -108,26 +133,37 @@ export default function StudentsPage() {
             };
 
             if (editingStudent) {
-                await supabase.from('students').update(studentData).eq('id', editingStudent.id);
+                const { error } = await supabase.from('students').update(studentData).eq('id', editingStudent.id);
+                if (error) throw error;
+                if (guardian_id) {
+                    const { error: linkError } = await supabase.from('student_guardians').upsert({
+                        student_id: editingStudent.id,
+                        guardian_id,
+                        is_primary: true,
+                    }, { onConflict: 'student_id,guardian_id' });
+                    if (linkError) console.warn('Could not write student_guardians link', linkError);
+                }
             } else {
-                const { data: newStudent } = await supabase.from('students').insert(studentData).select().single();
+                const { data: newStudent, error } = await supabase.from('students').insert(studentData).select().single();
+                if (error) throw error;
 
-                // Create student-guardian relationship too
                 if (guardian_id && newStudent) {
-                    await supabase.from('student_guardians').insert({
+                    const { error: linkError } = await supabase.from('student_guardians').upsert({
                         student_id: newStudent.id,
                         guardian_id,
                         is_primary: true,
-                    });
+                    }, { onConflict: 'student_id,guardian_id' });
+                    if (linkError) console.warn('Could not write student_guardians link', linkError);
                 }
             }
 
+            toast.success(editingStudent ? 'Student updated' : 'Student saved');
             setShowModal(false);
             setForm(blankForm);
             setEditingStudent(null);
             await fetchAll();
-        } catch (err) {
-            console.error(err);
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to save student');
         } finally {
             setSaving(false);
         }
@@ -141,6 +177,7 @@ export default function StudentsPage() {
             other_names: student.other_names || '',
             gender: student.gender || '',
             date_of_birth: student.date_of_birth || '',
+            admission_date: student.admission_date || '',
             class_id: student.class_id || '',
             house_id: student.house_id || '',
             guardian_name: student.guardians ? `${student.guardians.first_name} ${student.guardians.last_name}` : '',
@@ -158,8 +195,12 @@ export default function StudentsPage() {
 
     const handleDelete = async (id: string) => {
         if (confirm('Are you sure you want to remove this student?')) {
-            await supabase.from('students').delete().eq('id', id);
-            await fetchAll();
+            const { error } = await supabase.from('students').delete().eq('id', id);
+            if (error) toast.error(error.message);
+            else {
+                toast.success('Student removed');
+                await fetchAll();
+            }
         }
         setMenuOpen(null);
     };
@@ -182,7 +223,19 @@ export default function StudentsPage() {
                     <button className="btn btn-secondary btn-sm">
                         <Download size={16} /> Export
                     </button>
-                    <button className="btn btn-primary" onClick={() => { setEditingStudent(null); setForm(blankForm); setShowModal(true); }} id="btn-add-student">
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                            if (!canAddStudents) {
+                                toast.error('Set up subjects, houses, streams, and classes before adding students.');
+                                return;
+                            }
+                            setEditingStudent(null);
+                            setForm({ ...blankForm, admission_date: new Date().toISOString().slice(0, 10) });
+                            setShowModal(true);
+                        }}
+                        id="btn-add-student"
+                    >
                         <Plus size={18} /> New Student
                     </button>
                 </div>
@@ -217,6 +270,11 @@ export default function StudentsPage() {
 
             {/* Table */}
             <div className="card">
+                {!canAddStudents && !loading && (
+                    <div className="form-error mb-4">
+                        Set up at least one subject, house, stream, and class before admitting students.
+                    </div>
+                )}
                 {loading ? (
                     <div className="flex justify-center" style={{ padding: '3rem' }}>
                         <span className="spinner" style={{ width: 32, height: 32 }} />
@@ -317,6 +375,12 @@ export default function StudentsPage() {
                                     <input className="form-input" placeholder="e.g. 2026/001" value={form.admission_number} onChange={e => update('admission_number', e.target.value)} />
                                 </div>
                             </div>
+                            <div className="grid-2">
+                                <div className="form-group">
+                                    <label className="form-label">Date Admitted</label>
+                                    <input className="form-input" type="date" value={form.admission_date} onChange={e => update('admission_date', e.target.value)} />
+                                </div>
+                            </div>
 
                             <h4 className="text-sm font-semibold mb-2 mt-4" style={{ color: 'var(--green-700)' }}>Academic Placement</h4>
                             <div className="grid-2">
@@ -364,7 +428,13 @@ export default function StudentsPage() {
                             <div className="grid-2">
                                 <div className="form-group">
                                     <label className="form-label">Guardian Phone</label>
-                                    <input className="form-input" placeholder="+254 712 345 678" value={form.guardian_phone} onChange={e => update('guardian_phone', e.target.value)} />
+                                    <input
+                                        className="form-input"
+                                        placeholder="+254712345678"
+                                        value={form.guardian_phone}
+                                        onChange={e => update('guardian_phone', e.target.value)}
+                                        onBlur={e => update('guardian_phone', normalizeKenyanPhone(e.target.value))}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Guardian Email</label>
@@ -394,7 +464,7 @@ export default function StudentsPage() {
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.first_name.trim()}>
+                            <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.first_name.trim() || !form.last_name.trim() || !form.class_id || !form.house_id}>
                                 {saving ? <span className="spinner" /> : editingStudent ? 'Update Student' : 'Add Student'}
                             </button>
                         </div>

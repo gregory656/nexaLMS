@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Plus, Search, MoreVertical, Shield, UserCog, Mail, Phone, X, Trash2, Edit2 } from 'lucide-react';
+import { isValidKenyanPhone, normalizeKenyanPhone } from '../../lib/phone';
+import { Plus, Search, MoreVertical, Shield, Mail, Phone, X, Trash2, Edit2 } from 'lucide-react';
 
 export default function StaffPage() {
     const { school } = useAuth();
@@ -25,17 +27,19 @@ export default function StaffPage() {
     const fetchStaff = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const { data: staffData } = await supabase
+        const { data: staffData, error: staffError } = await supabase
             .from('teachers')
             .select('*, user_roles(role_id, roles(display_name))')
             .eq('school_id', school.id)
             .order('first_name');
 
-        const { data: rolesData } = await supabase
+        const { data: rolesData, error: rolesError } = await supabase
             .from('roles')
             .select('*')
             .eq('school_id', school.id);
 
+        if (staffError) toast.error(staffError.message);
+        if (rolesError) toast.error(rolesError.message);
         setStaff(staffData || []);
         setRoles(rolesData || []);
         setLoading(false);
@@ -44,19 +48,62 @@ export default function StaffPage() {
     useEffect(() => { fetchStaff(); }, [school?.id]);
 
     const handleSave = async () => {
-        if (!form.first_name.trim()) return;
-        setSaving(true);
-        const teacherData = { ...form, school_id: school!.id };
-
-        if (selectedStaff && !showRoleModal) {
-            await supabase.from('teachers').update(teacherData).eq('id', selectedStaff.id);
-        } else {
-            await supabase.from('teachers').insert(teacherData);
+        if (!form.first_name.trim() || !form.last_name.trim()) return;
+        if (!isValidKenyanPhone(form.phone)) {
+            toast.error('Use a valid Kenyan phone number, e.g. +254712345678.');
+            return;
         }
+        setSaving(true);
+        const teacherData = {
+            ...form,
+            first_name: form.first_name.trim(),
+            last_name: form.last_name.trim(),
+            email: form.email.trim() || null,
+            phone: normalizeKenyanPhone(form.phone) || null,
+            gender: form.gender || null,
+            tsc_number: form.tsc_number.trim() || null,
+            id_number: form.id_number.trim() || null,
+            qualification: form.qualification.trim() || null,
+            school_id: school!.id
+        };
 
-        setShowModal(false);
-        fetchStaff();
+        const { error } = selectedStaff && !showRoleModal
+            ? await supabase.from('teachers').update(teacherData).eq('id', selectedStaff.id)
+            : await supabase.from('teachers').insert(teacherData);
+
+        if (error) {
+            toast.error(error.message);
+        } else {
+            toast.success(selectedStaff ? 'Staff member updated' : 'Staff member saved');
+            setShowModal(false);
+            setSelectedStaff(null);
+            setForm({
+                first_name: '', last_name: '', email: '', phone: '', gender: '',
+                tsc_number: '', id_number: '', qualification: '', employment_type: 'permanent',
+            });
+            await fetchStaff();
+        }
         setSaving(false);
+    };
+
+    const openStaffModal = (member?: any) => {
+        setSelectedStaff(member || null);
+        setForm(member ? {
+            first_name: member.first_name || '',
+            last_name: member.last_name || '',
+            email: member.email || '',
+            phone: member.phone || '',
+            gender: member.gender || '',
+            tsc_number: member.tsc_number || '',
+            id_number: member.id_number || '',
+            qualification: member.qualification || '',
+            employment_type: member.employment_type || 'permanent',
+        } : {
+            first_name: '', last_name: '', email: '', phone: '', gender: '',
+            tsc_number: '', id_number: '', qualification: '', employment_type: 'permanent',
+        });
+        setShowModal(true);
+        setMenuOpen(null);
     };
 
     const openRoleAssignment = (member: any) => {
@@ -81,7 +128,12 @@ export default function StaffPage() {
 
         setSaving(true);
         // Delete existing roles for this user
-        await supabase.from('user_roles').delete().eq('user_id', selectedStaff.user_id);
+        const { error: deleteError } = await supabase.from('user_roles').delete().eq('user_id', selectedStaff.user_id);
+        if (deleteError) {
+            toast.error(deleteError.message);
+            setSaving(false);
+            return;
+        }
 
         // Insert new roles
         if (assignedRoleIds.length > 0) {
@@ -89,11 +141,17 @@ export default function StaffPage() {
                 user_id: selectedStaff.user_id,
                 role_id: roleId
             }));
-            await supabase.from('user_roles').insert(inserts);
+            const { error } = await supabase.from('user_roles').insert(inserts);
+            if (error) {
+                toast.error(error.message);
+                setSaving(false);
+                return;
+            }
         }
 
+        toast.success('Roles updated');
         setShowRoleModal(false);
-        fetchStaff();
+        await fetchStaff();
         setSaving(false);
     };
 
@@ -104,7 +162,7 @@ export default function StaffPage() {
                     <h1 className="page-title">Staff & Teachers</h1>
                     <p className="page-subtitle">Manage educators and administrative personnel</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => { setSelectedStaff(null); setShowModal(true); }}>
+                <button className="btn btn-primary" onClick={() => openStaffModal()}>
                     <Plus size={18} /> New Staff
                 </button>
             </div>
@@ -170,7 +228,7 @@ export default function StaffPage() {
                                                         <button className="dropdown-item" onClick={() => openRoleAssignment(member)}>
                                                             <Shield size={14} /> Assign Roles
                                                         </button>
-                                                        <button className="dropdown-item" onClick={() => { setSelectedStaff(member); setShowModal(true); setMenuOpen(null); }}>
+                                                        <button className="dropdown-item" onClick={() => openStaffModal(member)}>
                                                             <Edit2 size={14} /> Edit Info
                                                         </button>
                                                         <button className="dropdown-item" style={{ color: 'var(--danger)' }}>
@@ -214,7 +272,13 @@ export default function StaffPage() {
                             <div className="grid-2">
                                 <div className="form-group">
                                     <label className="form-label">Phone Number</label>
-                                    <input className="form-input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                                    <input
+                                        className="form-input"
+                                        placeholder="+254712345678"
+                                        value={form.phone}
+                                        onChange={e => setForm({ ...form, phone: e.target.value })}
+                                        onBlur={e => setForm({ ...form, phone: normalizeKenyanPhone(e.target.value) })}
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">TSC Number</label>
@@ -224,7 +288,9 @@ export default function StaffPage() {
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>Save Staff Member</button>
+                            <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.first_name.trim() || !form.last_name.trim()}>
+                                {saving ? <span className="spinner" /> : 'Save Staff Member'}
+                            </button>
                         </div>
                     </div>
                 </div>

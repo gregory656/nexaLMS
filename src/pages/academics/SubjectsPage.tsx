@@ -1,23 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Plus, Search, BookOpen, Trash2, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, X } from 'lucide-react';
 
 export default function SubjectsPage() {
     const { school } = useAuth();
     const [subjects, setSubjects] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [formData, setFormData] = useState({ name: '', code: '', category: 'core', is_compulsory: true });
 
     const fetchSubjects = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('subjects')
             .select('*')
             .eq('school_id', school.id)
             .order('name');
+        if (error) toast.error(error.message);
         setSubjects(data || []);
         setLoading(false);
     };
@@ -26,10 +29,22 @@ export default function SubjectsPage() {
 
     const handleSave = async () => {
         if (!formData.name.trim()) return;
-        await supabase.from('subjects').insert({ ...formData, school_id: school!.id });
-        setFormData({ name: '', code: '', category: 'core', is_compulsory: true });
-        setShowModal(false);
-        fetchSubjects();
+        setSaving(true);
+        const { error } = await supabase.from('subjects').insert({
+            ...formData,
+            name: formData.name.trim(),
+            code: formData.code.trim() || null,
+            school_id: school!.id
+        });
+        if (error) {
+            toast.error(error.message);
+        } else {
+            toast.success('Subject saved');
+            setFormData({ name: '', code: '', category: 'core', is_compulsory: true });
+            setShowModal(false);
+            await fetchSubjects();
+        }
+        setSaving(false);
     };
 
     return (
@@ -131,7 +146,9 @@ export default function SubjectsPage() {
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                            <button className="btn btn-primary" onClick={handleSave}>Save Subject</button>
+                            <button className="btn btn-primary" onClick={handleSave} disabled={saving || !formData.name.trim()}>
+                                {saving ? <span className="spinner" /> : 'Save Subject'}
+                            </button>
                         </div>
                     </div>
                 </div>
