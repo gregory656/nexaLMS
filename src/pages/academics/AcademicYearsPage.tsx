@@ -18,6 +18,8 @@ export default function AcademicYearsPage() {
         start_date: '',
         end_date: '',
         promote_students: true,
+        graduating_grade_id: '',
+        entry_grade_id: '',
     });
 
     const fetchAll = async () => {
@@ -39,9 +41,19 @@ export default function AcademicYearsPage() {
 
     useEffect(() => { fetchAll(); }, [school?.id]);
 
+    const getGradeRank = (grade: any) => {
+        const digits = String(grade?.name || '').match(/\d+/g)?.map(Number) || [];
+        return digits.length ? Math.max(...digits) : Number(grade?.level_order || 0);
+    };
+
+    const sortedByDetectedRank = useMemo(
+        () => [...grades].sort((a, b) => getGradeRank(a) - getGradeRank(b) || a.level_order - b.level_order),
+        [grades]
+    );
+
     const currentYear = useMemo(() => years.find(y => y.is_current) || years[0], [years]);
-    const smallestGrade = grades[0];
-    const biggestGrade = grades[grades.length - 1];
+    const smallestGrade = sortedByDetectedRank[0] || grades[0];
+    const biggestGrade = sortedByDetectedRank[sortedByDetectedRank.length - 1] || grades[grades.length - 1];
 
     const openModal = () => {
         const base = currentYear?.name?.match(/\d{4}/)?.[0];
@@ -51,6 +63,8 @@ export default function AcademicYearsPage() {
             start_date: `${next}-01-01`,
             end_date: `${next}-12-31`,
             promote_students: true,
+            graduating_grade_id: biggestGrade?.id || '',
+            entry_grade_id: smallestGrade?.id || '',
         });
         setShowModal(true);
     };
@@ -84,6 +98,7 @@ export default function AcademicYearsPage() {
 
     const promoteStudents = async (newClasses: any[]) => {
         if (!currentYear?.id || grades.length === 0) return { promoted: 0, alumni: 0 };
+        const graduatingGradeId = form.graduating_grade_id || biggestGrade?.id;
 
         const { data: students, error } = await supabase
             .from('students')
@@ -102,7 +117,7 @@ export default function AcademicYearsPage() {
             const currentOrder = currentClass.grade_levels?.level_order;
             const nextGrade = grades.find(g => g.level_order === currentOrder + 1);
 
-            if (!nextGrade) {
+            if (currentClass.grade_level_id === graduatingGradeId || !nextGrade) {
                 const { error: alumniError } = await supabase.from('alumni').insert({
                     school_id: school!.id,
                     academic_year_id: currentYear.id,
@@ -185,9 +200,9 @@ export default function AcademicYearsPage() {
                 <div>
                     <h3>Promotion rule</h3>
                     <p>
-                        All {biggestGrade?.name || 'highest grade'} learners will be promoted to Alumni.
-                        {smallestGrade?.name || 'The first grade'} will be left empty for new admissions.
-                        Other students keep their stream and move to the next grade.
+                        The system detects the biggest grade level and promotes that level to Alumni.
+                        The lowest grade level is left empty for new admissions.
+                        Other students keep their stream and move to the next grade level.
                     </p>
                 </div>
             </div>
@@ -251,11 +266,41 @@ export default function AcademicYearsPage() {
                                 <div>
                                     <div className="font-semibold">Promote students automatically</div>
                                     <p className="text-sm text-muted">
-                                        {biggestGrade?.name || 'Highest grade'} goes to Alumni. {smallestGrade?.name || 'First grade'} stays empty for new students.
+                                        Biggest grade level goes to Alumni. Lowest grade level stays empty for new admissions.
                                     </p>
                                 </div>
                                 <CheckCircle2 size={20} />
                             </label>
+                            {form.promote_students && (
+                                <div className="grid-2 mt-4">
+                                    <div className="form-group">
+                                        <label className="form-label">Grade level to promote to Alumni</label>
+                                        <select
+                                            className="form-select"
+                                            value={form.graduating_grade_id}
+                                            onChange={e => setForm({ ...form, graduating_grade_id: e.target.value })}
+                                        >
+                                            {grades.map(grade => (
+                                                <option key={grade.id} value={grade.id}>{grade.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="form-hint">Detected biggest grade level: {biggestGrade?.name || '-'}</p>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Grade level left empty for admissions</label>
+                                        <select
+                                            className="form-select"
+                                            value={form.entry_grade_id}
+                                            onChange={e => setForm({ ...form, entry_grade_id: e.target.value })}
+                                        >
+                                            {grades.map(grade => (
+                                                <option key={grade.id} value={grade.id}>{grade.name}</option>
+                                            ))}
+                                        </select>
+                                        <p className="form-hint">Detected lowest grade level: {smallestGrade?.name || '-'}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>

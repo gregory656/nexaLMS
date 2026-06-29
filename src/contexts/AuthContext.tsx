@@ -49,12 +49,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return data;
     };
 
+    const fetchUserWithSchool = async (userId: string) => {
+        const { data, error } = await supabase
+            .from('users')
+            .select('*, schools(*)')
+            .eq('id', userId)
+            .single();
+
+        if (!error && data) {
+            const { schools, ...user } = data as any;
+            return { user, school: schools || null };
+        }
+
+        const user = await fetchUser(userId);
+        const school = user?.school_id ? await fetchSchool(user.school_id) : null;
+        return { user, school };
+    };
+
     const refreshUser = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-            const user = await fetchUser(session.user.id);
+            const { user, school } = await fetchUserWithSchool(session.user.id);
             if (user) {
-                const school = user.school_id ? await fetchSchool(user.school_id) : null;
                 setState(prev => ({
                     ...prev,
                     user,
@@ -80,11 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const init = async () => {
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
-                const user = await fetchUser(session.user.id);
-                let school = null;
-                if (user?.school_id) {
-                    school = await fetchSchool(user.school_id);
-                }
+                const { user, school } = await fetchUserWithSchool(session.user.id);
                 setState({
                     user,
                     school,
@@ -101,11 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 if (event === 'SIGNED_IN' && session?.user) {
-                    const user = await fetchUser(session.user.id);
-                    let school = null;
-                    if (user?.school_id) {
-                        school = await fetchSchool(user.school_id);
-                    }
+                    const { user, school } = await fetchUserWithSchool(session.user.id);
                     setState({
                         user,
                         school,
@@ -141,7 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const signIn = async (email: string, password: string) => {
         const { error } = await supabase.auth.signInWithPassword({
-            email,
+            email: email.trim(),
             password,
         });
         return { error };

@@ -6,7 +6,7 @@
 - Staff records created from the dashboard now appear correctly in the Staff sidebar/page.
 - Added functional staff removal from the desktop three-dot action menu.
 - Updated the dashboard welcome area to use the admin full name, a glitter-style heading, and a shiny styled date line.
-- Changed Recent Students and Recent Staff into compact dashboard cards with Expand/Shrink buttons so large schools do not flood the dashboard.
+- Changed Recent Students and Recent Staff into compact dashboard cards with See More/See Less buttons so large schools do not flood the dashboard.
 - School Settings now opens the school setup/profile editor and updates the existing school record instead of creating a new school.
 - Dashboard School Profile has an Edit Profile button that routes to School Settings.
 - Uploaded school logo/badge is used in the sidebar brand avatar and the top-right header avatar.
@@ -22,6 +22,18 @@
 - Added Forgot Password flow that checks the app `users` table first, then asks Supabase Auth to send a reset email.
 - Added `nexagen.png` to the auth card visual.
 - Made top-right profile/settings dropdown actions route to School Settings.
+
+## Follow-up Fixes
+
+- Styled the auth-card badge image so the full badge is visible at a smaller size.
+- Fixed the password visibility eye icon by overriding the generic input-icon SVG positioning.
+- Improved login bootstrap by fetching the user profile and school in one embedded request when available.
+- Changed the dashboard greeting to avoid showing the raw email when the admin name is missing.
+- Dashboard recent Students and Staff now show one row by default, with See More and See Less controls.
+- Added dashboard in-memory caching so returning to the dashboard keeps the previous view visible while fresh data reloads.
+- Updated academic-year copy to say biggest grade level and lowest grade level instead of naming a specific class.
+- Added admin-selectable grade controls for the level promoted to Alumni and the level left open for admissions.
+- Fixed Departments by removing the fragile embedded `departments -> teachers` select and mapping HOD staff separately.
 
 ## Database Migration
 
@@ -51,6 +63,6 @@ When creating a new academic year with promotion enabled:
 
 ## Notes
 
-- Promotion depends on correct `grade_levels.level_order`. For example, Form 1 should be lower than Form 2, Form 3, and Form 4.
+- Promotion depends on correct `grade_levels.level_order`; the highest detected grade level is promoted to Alumni unless the admin overrides it.
 - The auth card uses `src/assets/nexagen.png` because that is the available uploaded asset in this workspace.
 - The production build passes with `npm.cmd run build`. Vite reports only the existing large chunk warning.

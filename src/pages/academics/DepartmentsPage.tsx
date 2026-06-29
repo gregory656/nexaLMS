@@ -27,12 +27,16 @@ export default function DepartmentsPage() {
         if (!school?.id) return;
         setLoading(true);
         const [deptRes, teacherRes] = await Promise.all([
-            supabase.from('departments').select('*, teachers(first_name, last_name)').eq('school_id', school.id).order('name'),
+            supabase.from('departments').select('*').eq('school_id', school.id).order('name'),
             supabase.from('teachers').select('*').eq('school_id', school.id).order('first_name'),
         ]);
         [deptRes.error, teacherRes.error].filter(Boolean).forEach(error => toast.error(error!.message));
-        setDepartments(deptRes.data || []);
-        setTeachers(teacherRes.data || []);
+        const teacherRows = teacherRes.data || [];
+        setDepartments((deptRes.data || []).map(department => ({
+            ...department,
+            head_teacher: teacherRows.find(teacher => teacher.id === department.head_teacher_id) || null,
+        })));
+        setTeachers(teacherRows);
         setLoading(false);
     };
 
@@ -132,8 +136,8 @@ export default function DepartmentsPage() {
                                     <tr key={department.id}>
                                         <td><strong>{department.name}</strong></td>
                                         <td>
-                                            {department.teachers
-                                                ? <span className="badge badge-green"><UserRoundCheck size={13} /> {department.teachers.first_name} {department.teachers.last_name}</span>
+                                            {department.head_teacher
+                                                ? <span className="badge badge-green"><UserRoundCheck size={13} /> {department.head_teacher.first_name} {department.head_teacher.last_name}</span>
                                                 : <span className="badge badge-gray">No HOD</span>}
                                         </td>
                                         <td>{department.description || '-'}</td>

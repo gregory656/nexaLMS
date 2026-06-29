@@ -19,6 +19,14 @@ interface DashboardStats {
     streams: number;
 }
 
+const DASHBOARD_CACHE = new Map<string, {
+    stats: DashboardStats;
+    recentStudents: any[];
+    recentTeachers: any[];
+    academicYears: any[];
+    selectedYearId: string;
+}>();
+
 export default function DashboardPage() {
     const { school, user } = useAuth();
     const [stats, setStats] = useState<DashboardStats>({
@@ -32,8 +40,27 @@ export default function DashboardPage() {
     const [showStudents, setShowStudents] = useState(false);
     const [showStaff, setShowStaff] = useState(false);
 
+    const getAdminName = () => {
+        const fullName = user?.full_name?.trim();
+        if (fullName && !fullName.includes('@')) return fullName;
+        const fallback = user?.email?.split('@')[0] || 'Admin';
+        return fallback
+            .split(/[._-]/)
+            .filter(Boolean)
+            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ') || 'Admin';
+    };
+
     useEffect(() => {
         if (!school?.id) return;
+        const cached = DASHBOARD_CACHE.get(school.id);
+        if (cached) {
+            setStats(cached.stats);
+            setRecentStudents(cached.recentStudents);
+            setRecentTeachers(cached.recentTeachers);
+            setAcademicYears(cached.academicYears);
+            setSelectedYearId(cached.selectedYearId);
+        }
 
         const fetchYears = async () => {
             const { data } = await supabase
@@ -64,7 +91,7 @@ export default function DashboardPage() {
                 supabase.from('streams').select('id', { count: 'exact', head: true }).eq('school_id', school.id),
             ]);
 
-            setStats({
+            const nextStats = {
                 students: students.count || 0,
                 teachers: teachers.count || 0,
                 guardians: guardians.count || 0,
@@ -72,32 +99,56 @@ export default function DashboardPage() {
                 subjects: subjects.count || 0,
                 houses: houses.count || 0,
                 streams: streams.count || 0,
-            });
+            };
+            setStats(nextStats);
+            return nextStats;
         };
 
         const fetchRecent = async () => {
-            let studentQuery = supabase
+            const studentQuery = supabase
                 .from('students')
                 .select('*, classes(name, academic_year_id)')
                 .eq('school_id', school.id)
                 .neq('status', 'graduated')
                 .order('created_at', { ascending: false });
 
-            const { data: stu } = await studentQuery.limit(showStudents ? 50 : 4);
-            setRecentStudents((stu || []).filter(s => !selectedYearId || s.classes?.academic_year_id === selectedYearId));
+            const { data: stu } = await studentQuery.limit(50);
+            const filteredStudents = (stu || []).filter(s => !selectedYearId || s.classes?.academic_year_id === selectedYearId);
+            setRecentStudents(filteredStudents);
 
             const { data: tea } = await supabase
                 .from('teachers')
                 .select('*')
                 .eq('school_id', school.id)
                 .order('created_at', { ascending: false })
-                .limit(showStaff ? 50 : 4);
+                .limit(50);
             setRecentTeachers(tea || []);
+            return { students: filteredStudents, teachers: tea || [] };
         };
 
-        fetchStats();
-        fetchRecent();
-    }, [school?.id, selectedYearId, showStudents, showStaff]);
+        const refresh = async () => {
+            const [nextStats, people] = await Promise.all([fetchStats(), fetchRecent()]);
+            DASHBOARD_CACHE.set(school.id, {
+                stats: nextStats,
+                recentStudents: people.students,
+                recentTeachers: people.teachers,
+                academicYears,
+                selectedYearId,
+            });
+        };
+        refresh();
+    }, [school?.id, selectedYearId]);
+
+    useEffect(() => {
+        if (!school?.id) return;
+        DASHBOARD_CACHE.set(school.id, {
+            stats,
+            recentStudents,
+            recentTeachers,
+            academicYears,
+            selectedYearId,
+        });
+    }, [school?.id, stats, recentStudents, recentTeachers, academicYears, selectedYearId]);
 
     const selectedYear = useMemo(
         () => academicYears.find(year => year.id === selectedYearId),
@@ -122,7 +173,7 @@ export default function DashboardPage() {
             <div className="page-header">
                 <div>
                     <h1 className="page-title glitter-title">
-                        Welcome, {user?.full_name || 'Admin'}
+                        Welcome, {getAdminName()}
                     </h1>
                     <p className="page-subtitle shiny-date">{currentDate} - {school?.name || 'NexaLMS'}</p>
                 </div>
@@ -272,7 +323,7 @@ function CompactPeopleCard({
                     {rows.length > 0 && (
                         <button className="btn btn-ghost btn-sm" onClick={onToggle}>
                             {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                            {expanded ? 'Shrink' : 'Expand'}
+                            {expanded ? 'See Less' : 'See More'}
                         </button>
                     )}
                     <Link to={href} className="btn btn-ghost btn-sm">View All</Link>
@@ -292,7 +343,7 @@ function CompactPeopleCard({
                             <tr>{headers.map(header => <th key={header}>{header}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {rows.map(row => (
+                            {(expanded ? rows : rows.slice(0, 1)).map(row => (
                                 <tr key={row.id}>{renderRow(row)}</tr>
                             ))}
                         </tbody>
