@@ -13,6 +13,7 @@ interface AuthState {
 interface AuthContextType extends AuthState {
     signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
     signIn: (email: string, password: string) => Promise<{ error: any }>;
+    resetPassword: (email: string) => Promise<{ error: any }>;
     signOut: () => Promise<void>;
     signInAsTest: () => Promise<{ error: any }>;
     refreshUser: () => Promise<void>;
@@ -146,6 +147,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error };
     };
 
+    const resetPassword = async (email: string) => {
+        const { data: appUser, error: lookupError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (lookupError) return { error: lookupError };
+        if (!appUser) return { error: { message: 'No admin account exists for that email.' } };
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/auth/login`,
+        });
+        return { error };
+    };
+
     const signOut = async () => {
         await supabase.auth.signOut();
     };
@@ -191,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ ...state, signUp, signIn, signOut, refreshUser, refreshSchool, signInAsTest }}>
+        <AuthContext.Provider value={{ ...state, signUp, signIn, resetPassword, signOut, refreshUser, refreshSchool, signInAsTest }}>
             {children}
         </AuthContext.Provider>
     );

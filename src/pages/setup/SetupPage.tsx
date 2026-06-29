@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -32,7 +32,7 @@ const STEPS = [
 ];
 
 export default function SetupPage() {
-    const { user, refreshUser, refreshSchool } = useAuth();
+    const { user, school: existingSchool, refreshUser, refreshSchool } = useAuth();
     const navigate = useNavigate();
     const [step, setStep] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -61,6 +61,28 @@ export default function SetupPage() {
     const [logoPreview, setLogoPreview] = useState('');
     const [watermarkFile, setWatermarkFile] = useState<File | null>(null);
     const [watermarkPreview, setWatermarkPreview] = useState('');
+
+    useEffect(() => {
+        if (!existingSchool) return;
+        setForm({
+            name: existingSchool.name || '',
+            motto: existingSchool.motto || '',
+            email: existingSchool.email || user?.email || '',
+            phone: existingSchool.phone || '',
+            address: existingSchool.address || '',
+            city: existingSchool.city || '',
+            county: existingSchool.county || '',
+            country: existingSchool.country || 'Kenya',
+            postal_code: existingSchool.postal_code || '',
+            website: existingSchool.website || '',
+            school_type: existingSchool.school_type || 'secondary',
+            curriculum: existingSchool.curriculum || '844',
+            established_year: existingSchool.established_year ? String(existingSchool.established_year) : '',
+            registration_number: existingSchool.registration_number || '',
+        });
+        setLogoPreview(existingSchool.logo_url || '');
+        setWatermarkPreview(existingSchool.watermark_url || '');
+    }, [existingSchool, user?.email]);
 
     const update = (field: keyof SchoolFormData, value: string) => {
         setForm(prev => ({ ...prev, [field]: value }));
@@ -112,54 +134,59 @@ export default function SetupPage() {
                 }
             }
 
-            // Create school
-            const { data: school, error: schoolError } = await supabase
-                .from('schools')
-                .insert({
-                    name: form.name,
-                    motto: form.motto,
-                    email: form.email,
-                    phone: form.phone,
-                    address: form.address,
-                    city: form.city,
-                    county: form.county,
-                    country: form.country,
-                    postal_code: form.postal_code,
-                    website: form.website,
-                    school_type: form.school_type,
-                    curriculum: form.curriculum,
-                    established_year: form.established_year ? parseInt(form.established_year) : null,
-                    registration_number: form.registration_number,
-                    logo_url,
-                    watermark_url,
-                    watermark_public_id,
-                    is_setup_complete: true,
-                })
-                .select()
-                .single();
+            const payload = {
+                name: form.name,
+                motto: form.motto,
+                email: form.email,
+                phone: form.phone,
+                address: form.address,
+                city: form.city,
+                county: form.county,
+                country: form.country,
+                postal_code: form.postal_code,
+                website: form.website,
+                school_type: form.school_type,
+                curriculum: form.curriculum,
+                established_year: form.established_year ? parseInt(form.established_year) : null,
+                registration_number: form.registration_number,
+                logo_url: logo_url || existingSchool?.logo_url || '',
+                watermark_url: watermark_url || existingSchool?.watermark_url || '',
+                watermark_public_id: watermark_public_id || existingSchool?.watermark_public_id || '',
+                is_setup_complete: true,
+            };
+
+            const schoolMutation = existingSchool?.id
+                ? supabase.from('schools').update(payload).eq('id', existingSchool.id)
+                : supabase.from('schools').insert(payload);
+
+            const { data: school, error: schoolError } = await schoolMutation.select().single();
 
             if (schoolError) throw schoolError;
 
             // Link user to school
-            const { error: userError } = await supabase
-                .from('users')
-                .update({ school_id: school.id, is_admin: true })
-                .eq('id', user!.id);
+            const { error: userError } = existingSchool?.id
+                ? { error: null }
+                : await supabase
+                    .from('users')
+                    .update({ school_id: school.id, is_admin: true })
+                    .eq('id', user!.id);
 
             if (userError) throw userError;
 
             // Create default admin role
-            const { data: adminRole } = await supabase
-                .from('roles')
-                .insert({
-                    name: 'admin',
-                    display_name: 'Administrator',
-                    description: 'Full access to all school features',
-                    school_id: school.id,
-                    is_system: true,
-                })
-                .select()
-                .single();
+            const { data: adminRole } = existingSchool?.id
+                ? { data: null }
+                : await supabase
+                    .from('roles')
+                    .insert({
+                        name: 'admin',
+                        display_name: 'Administrator',
+                        description: 'Full access to all school features',
+                        school_id: school.id,
+                        is_system: true,
+                    })
+                    .select()
+                    .single();
 
             if (adminRole) {
                 await supabase.from('user_roles').insert({
@@ -351,7 +378,7 @@ export default function SetupPage() {
                             </div>
 
                             <div>
-                                <label className="form-label">Watermark Badge 📛</label>
+                                <label className="form-label">Watermark Badge</label>
                                 <div
                                     className={`upload-area ${watermarkPreview ? 'has-file' : ''}`}
                                     onClick={() => watermarkInputRef.current?.click()}
@@ -382,7 +409,7 @@ export default function SetupPage() {
                         {/* Watermark Preview */}
                         {watermarkPreview && (
                             <div className="mt-6">
-                                <label className="form-label mb-2">📄 Document Watermark Preview</label>
+                                <label className="form-label mb-2">Document Watermark Preview</label>
                                 <div className="watermark-preview-container">
                                     <div className="watermark-bg">
                                         {Array.from({ length: 9 }).map((_, i) => (
@@ -392,7 +419,7 @@ export default function SetupPage() {
                                     <div style={{ position: 'relative', zIndex: 1 }}>
                                         <h4 style={{ marginBottom: '0.5rem' }}>{form.name || 'School Name'}</h4>
                                         <p className="text-sm text-muted" style={{ marginBottom: '0.5rem' }}>
-                                            Academic Report Card — Term 1, 2026
+                                            Academic Report Card - Term 1, 2026
                                         </p>
                                         <div style={{ display: 'flex', gap: '2rem', marginBottom: '0.5rem' }}>
                                             <div><span className="text-xs text-muted">Student:</span> <strong className="text-sm">John Doe</strong></div>
@@ -537,11 +564,11 @@ export default function SetupPage() {
                                     ['Type', form.school_type === 'secondary' ? 'Secondary' : form.school_type],
                                     ['Curriculum', form.curriculum.toUpperCase()],
                                     ['Email', form.email],
-                                    ['Phone', form.phone || '—'],
-                                    ['County', form.county || '—'],
-                                    ['City', form.city || '—'],
-                                    ['Watermark', watermarkFile ? '✅ Uploaded' : '—'],
-                                    ['Est.', form.established_year || '—'],
+                                    ['Phone', form.phone || '-'],
+                                    ['County', form.county || '-'],
+                                    ['City', form.city || '-'],
+                                    ['Watermark', watermarkFile || watermarkPreview ? 'Uploaded' : '-'],
+                                    ['Est.', form.established_year || '-'],
                                 ].map(([label, val]) => (
                                     <div key={label}>
                                         <span className="text-xs text-muted">{label}</span>
@@ -576,7 +603,7 @@ export default function SetupPage() {
                             disabled={loading}
                             id="btn-complete-setup"
                         >
-                            {loading ? <span className="spinner" /> : '🚀 Complete Setup'}
+                            {loading ? <span className="spinner" /> : existingSchool?.id ? 'Update School Profile' : 'Complete Setup'}
                         </button>
                     )}
                 </div>

@@ -207,6 +207,35 @@ h4 { font-size: 1.125rem; }
   margin-bottom: 2rem;
 }
 
+.auth-visual {
+  height: 118px;
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, rgba(16,185,129,0.16), rgba(59,130,246,0.12)),
+    var(--gray-50);
+  border: 1px solid var(--gray-100);
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.auth-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.auth-visual svg {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  color: var(--green-600);
+  filter: drop-shadow(0 4px 10px rgba(16,185,129,0.25));
+}
+
 .auth-logo-icon {
   width: 48px;
   height: 48px;
@@ -342,6 +371,24 @@ h4 { font-size: 1.125rem; }
   margin-top: 0.25rem;
 }
 
+.form-error-banner,
+.success-banner {
+  padding: 0.7rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.form-error-banner {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.success-banner {
+  background: var(--success-light);
+  color: var(--green-700);
+}
+
 .form-hint {
   color: var(--gray-400);
   font-size: 0.8rem;
@@ -442,6 +489,24 @@ h4 { font-size: 1.125rem; }
   transform: none !important;
 }
 
+.auth-link-button,
+.input-icon-button {
+  color: var(--green-700);
+}
+
+.auth-link-button {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.input-icon-button {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  left: auto;
+}
+
 /* ============================================
    Dashboard Layout
    ============================================ */
@@ -488,10 +553,24 @@ h4 { font-size: 1.125rem; }
   flex-shrink: 0;
 }
 
+.sidebar-logo-image {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+  flex-shrink: 0;
+}
+
 .sidebar-logo-text {
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--gray-900);
+  max-width: 165px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-logo-sub {
@@ -747,6 +826,12 @@ h4 { font-size: 1.125rem; }
   font-size: 0.85rem;
 }
 
+.image-avatar {
+  object-fit: cover;
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+}
+
 /* Page Content */
 .page-content {
   flex: 1;
@@ -764,6 +849,30 @@ h4 { font-size: 1.125rem; }
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--gray-900);
+}
+
+.glitter-title {
+  background: linear-gradient(110deg, var(--gray-900), var(--green-600), #2563eb, var(--gray-900));
+  background-size: 240% 100%;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmerText 5s ease-in-out infinite;
+}
+
+.shiny-date {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  margin-top: 0.4rem;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--white), var(--green-50));
+  border: 1px solid var(--green-100);
+  box-shadow: var(--shadow-sm);
+}
+
+@keyframes shimmerText {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 .page-subtitle {
@@ -798,6 +907,76 @@ h4 { font-size: 1.125rem; }
   font-size: 1rem;
   font-weight: 600;
   color: var(--gray-900);
+}
+
+.setup-nudge {
+  background: linear-gradient(135deg, var(--green-50), var(--white));
+  border-color: var(--green-200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.school-profile-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.school-profile-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+}
+
+.school-profile-logo.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--green-100);
+  color: var(--green-600);
+}
+
+.profile-fields {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.compact-list-card {
+  min-height: 310px;
+}
+
+.compact-empty {
+  padding: 1.5rem;
+}
+
+.compact-table {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.promotion-summary,
+.promotion-choice,
+.alumni-count {
+  align-items: center;
+}
+
+.promotion-summary {
+  display: flex;
+  gap: 1rem;
+  background: linear-gradient(135deg, var(--info-light), var(--white));
+}
+
+.promotion-summary svg,
+.alumni-count svg {
+  color: var(--green-600);
+  flex-shrink: 0;
 }
 
 .card-body {
@@ -916,6 +1095,10 @@ h4 { font-size: 1.125rem; }
 
 @media (max-width: 640px) {
   .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: 1fr; }
+  .school-profile-grid,
+  .profile-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ============================================

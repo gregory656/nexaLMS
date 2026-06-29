@@ -18,6 +18,9 @@ import GuardiansPage from './pages/guardians/GuardiansPage';
 import StreamsPage from './pages/academics/StreamsPage';
 import SubjectsPage from './pages/academics/SubjectsPage';
 import HousesPage from './pages/academics/HousesPage';
+import AcademicYearsPage from './pages/academics/AcademicYearsPage';
+import DepartmentsPage from './pages/academics/DepartmentsPage';
+import AlumniPage from './pages/alumni/AlumniPage';
 import RolesPage from './pages/roles/RolesPage';
 import SubscriptionPage from './pages/subscription/SubscriptionPage';
 
@@ -83,13 +86,14 @@ export default function App() {
               <Route path="students" element={<StudentsPage />} />
               <Route path="staff" element={<StaffPage />} />
               <Route path="guardians" element={<GuardiansPage />} />
+              <Route path="alumni" element={<AlumniPage />} />
 
               {/* Academics */}
               <Route path="academics/streams" element={<StreamsPage />} />
               <Route path="academics/subjects" element={<SubjectsPage />} />
               <Route path="academics/houses" element={<HousesPage />} />
-              <Route path="academics/years" element={<Placeholder title="Academic Years" />} />
-              <Route path="academics/departments" element={<Placeholder title="Departments" />} />
+              <Route path="academics/years" element={<AcademicYearsPage />} />
+              <Route path="academics/departments" element={<DepartmentsPage />} />
               <Route path="academics/timetable" element={<Placeholder title="Timetable" />} />
 
               {/* Assessment */}
@@ -101,7 +105,7 @@ export default function App() {
               <Route path="roles" element={<RolesPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
               <Route path="announcements" element={<Placeholder title="Announcements" />} />
-              <Route path="settings" element={<Placeholder title="Global Settings" />} />
+              <Route path="settings" element={<SetupPage />} />
             </Route>
 
             {/* Fallback */}

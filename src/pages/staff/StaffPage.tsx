@@ -29,9 +29,17 @@ export default function StaffPage() {
         setLoading(true);
         const { data: staffData, error: staffError } = await supabase
             .from('teachers')
-            .select('*, user_roles(role_id, roles(display_name))')
+            .select('*')
             .eq('school_id', school.id)
             .order('first_name');
+
+        const userIds = (staffData || []).map(member => member.user_id).filter(Boolean);
+        const { data: roleData, error: staffRoleError } = userIds.length
+            ? await supabase
+                .from('user_roles')
+                .select('user_id, role_id, roles(display_name)')
+                .in('user_id', userIds)
+            : { data: [], error: null };
 
         const { data: rolesData, error: rolesError } = await supabase
             .from('roles')
@@ -39,8 +47,17 @@ export default function StaffPage() {
             .eq('school_id', school.id);
 
         if (staffError) toast.error(staffError.message);
+        if (staffRoleError) toast.error(staffRoleError.message);
         if (rolesError) toast.error(rolesError.message);
-        setStaff(staffData || []);
+        const roleMap = new Map<string, any[]>();
+        (roleData || []).forEach(role => {
+            if (!role.user_id) return;
+            roleMap.set(role.user_id, [...(roleMap.get(role.user_id) || []), role]);
+        });
+        setStaff((staffData || []).map(member => ({
+            ...member,
+            user_roles: member.user_id ? roleMap.get(member.user_id) || [] : [],
+        })));
         setRoles(rolesData || []);
         setLoading(false);
     };
@@ -155,6 +172,17 @@ export default function StaffPage() {
         setSaving(false);
     };
 
+    const handleDeleteStaff = async (id: string) => {
+        if (!confirm('Remove this staff member?')) return;
+        const { error } = await supabase.from('teachers').delete().eq('id', id);
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Staff member removed');
+            await fetchStaff();
+        }
+        setMenuOpen(null);
+    };
+
     return (
         <>
             <div className="page-header">
@@ -231,7 +259,7 @@ export default function StaffPage() {
                                                         <button className="dropdown-item" onClick={() => openStaffModal(member)}>
                                                             <Edit2 size={14} /> Edit Info
                                                         </button>
-                                                        <button className="dropdown-item" style={{ color: 'var(--danger)' }}>
+                                                        <button className="dropdown-item" onClick={() => handleDeleteStaff(member.id)} style={{ color: 'var(--danger)' }}>
                                                             <Trash2 size={14} /> Remove
                                                         </button>
                                                     </div>

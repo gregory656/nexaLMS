@@ -1,17 +1,12 @@
-import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     LayoutDashboard, Users, GraduationCap, UserCheck,
     BookOpen, Calendar, ClipboardList, DollarSign,
-    Settings, Shield, CreditCard, Bell as BellIcon,
+    Settings, Shield, CreditCard,
     School, FileText, Clock, Megaphone,
     UserCog, BarChart3, LogOut, Home
 } from 'lucide-react';
-
-interface SidebarProps {
-    schoolName?: string;
-}
 
 const navSections = [
     {
@@ -26,6 +21,7 @@ const navSections = [
             { to: '/students', icon: GraduationCap, label: 'Students' },
             { to: '/staff', icon: Users, label: 'Staff / Teachers' },
             { to: '/guardians', icon: UserCheck, label: 'Guardians & Parents' },
+            { to: '/alumni', icon: GraduationCap, label: 'Alumni' },
         ]
     },
     {
@@ -64,8 +60,8 @@ const navSections = [
     }
 ];
 
-export default function Sidebar({ schoolName }: SidebarProps) {
-    const { user, signOut } = useAuth();
+export default function Sidebar() {
+    const { user, school, signOut } = useAuth();
     const navigate = useNavigate();
 
     const handleLogout = async () => {
@@ -83,10 +79,14 @@ export default function Sidebar({ schoolName }: SidebarProps) {
     return (
         <aside className="sidebar">
             <div className="sidebar-logo">
-                <div className="sidebar-logo-icon">N</div>
+                {school?.logo_url || school?.watermark_url ? (
+                    <img className="sidebar-logo-image" src={school.logo_url || school.watermark_url} alt="" />
+                ) : (
+                    <div className="sidebar-logo-icon">N</div>
+                )}
                 <div>
-                    <div className="sidebar-logo-text">NexaLMS</div>
-                    <div className="sidebar-logo-sub">{schoolName || 'School ERP'}</div>
+                    <div className="sidebar-logo-text">{school?.name || 'NexaLMS'}</div>
+                    <div className="sidebar-logo-sub">School ERP</div>
                 </div>
             </div>
 

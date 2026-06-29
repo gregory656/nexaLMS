@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import {
     GraduationCap, Users, UserCheck, BookOpen,
-    DollarSign, ClipboardList, TrendingUp, Calendar,
-    Bell, ArrowUpRight, AlertCircle
+    ClipboardList, TrendingUp, Calendar,
+    Bell, ArrowUpRight, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 interface DashboardStats {
@@ -25,13 +27,35 @@ export default function DashboardPage() {
     });
     const [recentStudents, setRecentStudents] = useState<any[]>([]);
     const [recentTeachers, setRecentTeachers] = useState<any[]>([]);
+    const [academicYears, setAcademicYears] = useState<any[]>([]);
+    const [selectedYearId, setSelectedYearId] = useState('');
+    const [showStudents, setShowStudents] = useState(false);
+    const [showStaff, setShowStaff] = useState(false);
+
+    useEffect(() => {
+        if (!school?.id) return;
+
+        const fetchYears = async () => {
+            const { data } = await supabase
+                .from('academic_years')
+                .select('*')
+                .eq('school_id', school.id)
+                .order('is_current', { ascending: false })
+                .order('start_date', { ascending: false });
+            setAcademicYears(data || []);
+            const current = data?.find(y => y.is_current) || data?.[0];
+            if (current) setSelectedYearId(current.id);
+        };
+
+        fetchYears();
+    }, [school?.id]);
 
     useEffect(() => {
         if (!school?.id) return;
 
         const fetchStats = async () => {
             const [students, teachers, guardians, classes, subjects, houses, streams] = await Promise.all([
-                supabase.from('students').select('id', { count: 'exact', head: true }).eq('school_id', school.id),
+                supabase.from('students').select('id', { count: 'exact', head: true }).eq('school_id', school.id).neq('status', 'graduated'),
                 supabase.from('teachers').select('id', { count: 'exact', head: true }).eq('school_id', school.id),
                 supabase.from('guardians').select('id', { count: 'exact', head: true }).eq('school_id', school.id),
                 supabase.from('classes').select('id', { count: 'exact', head: true }).eq('school_id', school.id),
@@ -52,34 +76,41 @@ export default function DashboardPage() {
         };
 
         const fetchRecent = async () => {
-            const { data: stu } = await supabase
+            let studentQuery = supabase
                 .from('students')
-                .select('*')
+                .select('*, classes(name, academic_year_id)')
                 .eq('school_id', school.id)
-                .order('created_at', { ascending: false })
-                .limit(5);
-            setRecentStudents(stu || []);
+                .neq('status', 'graduated')
+                .order('created_at', { ascending: false });
+
+            const { data: stu } = await studentQuery.limit(showStudents ? 50 : 4);
+            setRecentStudents((stu || []).filter(s => !selectedYearId || s.classes?.academic_year_id === selectedYearId));
 
             const { data: tea } = await supabase
                 .from('teachers')
                 .select('*')
                 .eq('school_id', school.id)
                 .order('created_at', { ascending: false })
-                .limit(5);
+                .limit(showStaff ? 50 : 4);
             setRecentTeachers(tea || []);
         };
 
         fetchStats();
         fetchRecent();
-    }, [school?.id]);
+    }, [school?.id, selectedYearId, showStudents, showStaff]);
+
+    const selectedYear = useMemo(
+        () => academicYears.find(year => year.id === selectedYearId),
+        [academicYears, selectedYearId]
+    );
 
     const statCards = [
-        { label: 'Total Students', value: stats.students, icon: GraduationCap, color: 'green', change: '+12 this term' },
+        { label: 'Total Students', value: stats.students, icon: GraduationCap, color: 'green', change: selectedYear ? `Showing ${selectedYear.name}` : 'All active learners' },
         { label: 'Teaching Staff', value: stats.teachers, icon: Users, color: 'blue', change: `${stats.teachers} active` },
         { label: 'Guardians', value: stats.guardians, icon: UserCheck, color: 'orange', change: 'Linked to students' },
         { label: 'Active Classes', value: stats.classes, icon: BookOpen, color: 'green', change: `${stats.streams} streams` },
-        { label: 'Subjects Offered', value: stats.subjects, icon: ClipboardList, color: 'blue', change: 'Across all levels' },
-        { label: 'Houses', value: stats.houses, icon: TrendingUp, color: 'orange', change: 'For sports & events' },
+        { label: 'Subjects Offered', value: stats.subjects, icon: ClipboardList, color: 'blue', change: 'Across departments' },
+        { label: 'Houses', value: stats.houses, icon: TrendingUp, color: 'orange', change: 'For sports and events' },
     ];
 
     const currentDate = new Date().toLocaleDateString('en-KE', {
@@ -90,43 +121,44 @@ export default function DashboardPage() {
         <>
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">
-                        Welcome back, {user?.full_name?.split(' ')[0] || 'Admin'} 👋
+                    <h1 className="page-title glitter-title">
+                        Welcome, {user?.full_name || 'Admin'}
                     </h1>
-                    <p className="page-subtitle">{currentDate} — {school?.name || 'NexaLMS'}</p>
+                    <p className="page-subtitle shiny-date">{currentDate} - {school?.name || 'NexaLMS'}</p>
                 </div>
                 <div className="flex gap-2">
-                    <button className="btn btn-secondary btn-sm">
-                        <Calendar size={16} /> Academic Calendar
-                    </button>
+                    <select className="form-select" value={selectedYearId} onChange={e => setSelectedYearId(e.target.value)} style={{ minWidth: 170 }}>
+                        {academicYears.length === 0 && <option value="">No academic years</option>}
+                        {academicYears.map(year => (
+                            <option key={year.id} value={year.id}>{year.name}{year.is_current ? ' current' : ''}</option>
+                        ))}
+                    </select>
+                    <Link to="/academics/years" className="btn btn-secondary btn-sm">
+                        <Calendar size={16} /> {selectedYear ? selectedYear.name : 'Academic Year'}
+                    </Link>
                     <button className="btn btn-primary btn-sm">
                         <Bell size={16} /> Announcements
                     </button>
                 </div>
             </div>
 
-            {/* Quick Setup Alert */}
             {stats.students === 0 && stats.teachers === 0 && (
-                <div className="card mb-4" style={{
-                    background: 'linear-gradient(135deg, var(--green-50), var(--white))',
-                    borderColor: 'var(--green-200)'
-                }}>
+                <div className="card mb-4 setup-nudge">
                     <div className="flex items-center gap-3">
                         <AlertCircle size={24} style={{ color: 'var(--green-600)' }} />
                         <div style={{ flex: 1 }}>
-                            <h4 style={{ fontSize: '1rem' }}>🚀 Let's set up your school</h4>
+                            <h4 style={{ fontSize: '1rem' }}>Set up your school workspace</h4>
                             <p className="text-sm text-muted">
-                                Start by adding streams, subjects, then staff and students. Go to <strong>Streams & Classes</strong> first.
+                                Start by adding streams, subjects, staff, and students. Streams and classes should come first.
                             </p>
                         </div>
-                        <a href="/academics/streams" className="btn btn-primary btn-sm">
+                        <Link to="/academics/streams" className="btn btn-primary btn-sm">
                             Get Started <ArrowUpRight size={14} />
-                        </a>
+                        </Link>
                     </div>
                 </div>
             )}
 
-            {/* Stat Cards */}
             <div className="grid-3 mb-6">
                 {statCards.map(card => (
                     <div key={card.label} className="stat-card">
@@ -142,113 +174,131 @@ export default function DashboardPage() {
                 ))}
             </div>
 
-            {/* School Info Banner */}
-            <div className="card mb-6">
+            <div className="card mb-6 school-profile-card">
                 <div className="card-header">
-                    <h3 className="card-title">🏫 School Profile</h3>
+                    <h3 className="card-title">School Profile</h3>
+                    <Link to="/settings" className="btn btn-ghost btn-sm">Edit Profile</Link>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '1.5rem', alignItems: 'center' }}>
-                    {school?.logo_url ? (
-                        <img src={school.logo_url} alt="Logo" style={{ width: 72, height: 72, borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+                <div className="school-profile-grid">
+                    {school?.logo_url || school?.watermark_url ? (
+                        <img src={school.logo_url || school.watermark_url} alt="School logo" className="school-profile-logo" />
                     ) : (
-                        <div style={{ width: 72, height: 72, borderRadius: 'var(--radius-md)', background: 'var(--green-100)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <GraduationCap size={36} style={{ color: 'var(--green-600)' }} />
+                        <div className="school-profile-logo placeholder">
+                            <GraduationCap size={36} />
                         </div>
                     )}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                    <div className="profile-fields">
                         {[
                             ['School', school?.name],
                             ['Email', school?.email],
-                            ['Phone', school?.phone || '—'],
-                            ['County', school?.county || '—'],
+                            ['Phone', school?.phone || '-'],
+                            ['County', school?.county || '-'],
                             ['Curriculum', school?.curriculum?.toUpperCase()],
                             ['Type', school?.school_type],
-                            ['Motto', school?.motto || '—'],
-                            ['Website', school?.website || '—'],
+                            ['Motto', school?.motto || '-'],
+                            ['Website', school?.website || '-'],
                         ].map(([label, val]) => (
                             <div key={label as string}>
                                 <span className="text-xs text-muted">{label}</span>
-                                <p className="text-sm font-semibold" style={{ marginTop: '0.15rem' }}>{val || '—'}</p>
+                                <p className="text-sm font-semibold">{val || '-'}</p>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* Recent Activity */}
             <div className="grid-2">
-                <div className="card">
-                    <div className="card-header">
-                        <h3 className="card-title">📚 Recent Students</h3>
-                        <a href="/students" className="btn btn-ghost btn-sm">View All</a>
-                    </div>
-                    {recentStudents.length === 0 ? (
-                        <div className="empty-state">
-                            <GraduationCap />
-                            <h3>No students yet</h3>
-                            <p>Add your first student to get started</p>
-                            <a href="/students" className="btn btn-primary btn-sm">Add Student</a>
-                        </div>
-                    ) : (
-                        <div className="table-wrapper">
-                            <table className="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Gender</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {recentStudents.map(s => (
-                                        <tr key={s.id}>
-                                            <td><strong>{s.first_name} {s.last_name}</strong></td>
-                                            <td>{s.gender || '—'}</td>
-                                            <td><span className="badge badge-green">{s.status}</span></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                <CompactPeopleCard
+                    title="Recent Students"
+                    emptyTitle="No students yet"
+                    emptyText="Add your first student to get started"
+                    href="/students"
+                    rows={recentStudents}
+                    expanded={showStudents}
+                    onToggle={() => setShowStudents(value => !value)}
+                    renderRow={student => (
+                        <>
+                            <td><strong>{student.first_name} {student.last_name}</strong></td>
+                            <td>{student.classes?.name || '-'}</td>
+                            <td><span className="badge badge-green">{student.status}</span></td>
+                        </>
                     )}
-                </div>
+                    headers={['Name', 'Class', 'Status']}
+                    icon={<GraduationCap />}
+                />
 
-                <div className="card">
-                    <div className="card-header">
-                        <h3 className="card-title">👩‍🏫 Recent Staff</h3>
-                        <a href="/staff" className="btn btn-ghost btn-sm">View All</a>
-                    </div>
-                    {recentTeachers.length === 0 ? (
-                        <div className="empty-state">
-                            <Users />
-                            <h3>No staff yet</h3>
-                            <p>Add teachers and staff to your school</p>
-                            <a href="/staff" className="btn btn-primary btn-sm">Add Staff</a>
-                        </div>
-                    ) : (
-                        <div className="table-wrapper">
-                            <table className="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Email</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {recentTeachers.map(t => (
-                                        <tr key={t.id}>
-                                            <td><strong>{t.first_name} {t.last_name}</strong></td>
-                                            <td>{t.email || '—'}</td>
-                                            <td><span className="badge badge-green">{t.status}</span></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                <CompactPeopleCard
+                    title="Recent Staff"
+                    emptyTitle="No staff yet"
+                    emptyText="Add teachers and staff to your school"
+                    href="/staff"
+                    rows={recentTeachers}
+                    expanded={showStaff}
+                    onToggle={() => setShowStaff(value => !value)}
+                    renderRow={teacher => (
+                        <>
+                            <td><strong>{teacher.first_name} {teacher.last_name}</strong></td>
+                            <td>{teacher.email || '-'}</td>
+                            <td><span className="badge badge-green">{teacher.status}</span></td>
+                        </>
                     )}
-                </div>
+                    headers={['Name', 'Email', 'Status']}
+                    icon={<Users />}
+                />
             </div>
         </>
+    );
+}
+
+function CompactPeopleCard({
+    title, emptyTitle, emptyText, href, rows, expanded, onToggle, renderRow, headers, icon
+}: {
+    title: string;
+    emptyTitle: string;
+    emptyText: string;
+    href: string;
+    rows: any[];
+    expanded: boolean;
+    onToggle: () => void;
+    renderRow: (row: any) => ReactNode;
+    headers: string[];
+    icon: ReactNode;
+}) {
+    return (
+        <div className="card compact-list-card">
+            <div className="card-header">
+                <h3 className="card-title">{title}</h3>
+                <div className="flex gap-2">
+                    {rows.length > 0 && (
+                        <button className="btn btn-ghost btn-sm" onClick={onToggle}>
+                            {expanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                            {expanded ? 'Shrink' : 'Expand'}
+                        </button>
+                    )}
+                    <Link to={href} className="btn btn-ghost btn-sm">View All</Link>
+                </div>
+            </div>
+            {rows.length === 0 ? (
+                <div className="empty-state compact-empty">
+                    {icon}
+                    <h3>{emptyTitle}</h3>
+                    <p>{emptyText}</p>
+                    <Link to={href} className="btn btn-primary btn-sm">Open</Link>
+                </div>
+            ) : (
+                <div className="table-wrapper compact-table">
+                    <table className="data-table">
+                        <thead>
+                            <tr>{headers.map(header => <th key={header}>{header}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                            {rows.map(row => (
+                                <tr key={row.id}>{renderRow(row)}</tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
     );
 }

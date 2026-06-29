@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Check, CreditCard, Zap, ShieldCheck, TrendingUp, Info } from 'lucide-react';
+import { Check, CreditCard, Zap, TrendingUp, Info } from 'lucide-react';
 
 export default function SubscriptionPage() {
     const { school } = useAuth();

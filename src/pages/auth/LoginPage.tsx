@@ -1,21 +1,33 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
+import nexagenImage from '../../assets/nexagen.png';
 
 export default function LoginPage() {
-    const { signIn, signInAsTest } = useAuth();
+    const { signIn, resetPassword } = useAuth();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [recoveryMode, setRecoveryMode] = useState(false);
     const [error, setError] = useState('');
+    const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setMessage('');
         setLoading(true);
+
+        if (recoveryMode) {
+            const { error: resetError } = await resetPassword(email.trim());
+            if (resetError) setError(resetError.message || 'Could not send password reset link');
+            else setMessage('Password reset link sent. Check that email inbox.');
+            setLoading(false);
+            return;
+        }
 
         const { error: authError } = await signIn(email, password);
         if (authError) {
@@ -29,33 +41,36 @@ export default function LoginPage() {
     return (
         <div className="auth-page">
             <div className="auth-card">
+                <div className="auth-visual">
+                    <img src={nexagenImage} alt="" />
+                    <Sparkles size={22} />
+                </div>
+
                 <div className="auth-logo">
                     <div className="auth-logo-icon">N</div>
                     <span className="auth-logo-text">NexaLMS</span>
                 </div>
 
-                <h2 className="auth-title">Welcome back</h2>
-                <p className="auth-subtitle">Sign in to your school admin account</p>
+                <h2 className="auth-title">{recoveryMode ? 'Recover password' : 'Welcome back'}</h2>
+                <p className="auth-subtitle">
+                    {recoveryMode ? 'Enter your admin email to receive a reset link' : 'Sign in to your school admin account'}
+                </p>
 
                 {error && (
-                    <div style={{
-                        background: 'var(--danger-light)',
-                        color: 'var(--danger)',
-                        padding: '0.7rem 1rem',
-                        borderRadius: 'var(--radius-md)',
-                        fontSize: '0.85rem',
-                        marginBottom: '1.25rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                    }}>
-                        ⚠️ {error}
+                    <div className="form-error-banner">
+                        {error}
+                    </div>
+                )}
+
+                {message && (
+                    <div className="success-banner">
+                        {message}
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit}>
                     <div className="form-group">
-                        <label className="form-label" htmlFor="login-email">School Email</label>
+                        <label className="form-label" htmlFor="login-email">Admin Email</label>
                         <div className="form-input-icon">
                             <Mail />
                             <input
@@ -70,36 +85,44 @@ export default function LoginPage() {
                         </div>
                     </div>
 
-                    <div className="form-group">
-                        <label className="form-label" htmlFor="login-password">Password</label>
-                        <div className="form-input-icon">
-                            <Lock />
-                            <input
-                                id="login-password"
-                                type={showPassword ? 'text' : 'password'}
-                                className="form-input"
-                                placeholder="••••••••"
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                required
-                                style={{ paddingRight: '2.75rem' }}
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                style={{
-                                    position: 'absolute',
-                                    right: '0.75rem',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    color: 'var(--gray-400)',
-                                    left: 'auto'
-                                }}
-                            >
-                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                            </button>
+                    {!recoveryMode && (
+                        <div className="form-group">
+                            <label className="form-label" htmlFor="login-password">Password</label>
+                            <div className="form-input-icon">
+                                <Lock />
+                                <input
+                                    id="login-password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    className="form-input"
+                                    placeholder="Enter password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    required
+                                    style={{ paddingRight: '2.75rem' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="input-icon-button"
+                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
                         </div>
-                    </div>
+                    )}
+
+                    <button
+                        type="button"
+                        className="auth-link-button"
+                        onClick={() => {
+                            setRecoveryMode(!recoveryMode);
+                            setError('');
+                            setMessage('');
+                        }}
+                    >
+                        {recoveryMode ? 'Back to sign in' : 'Forgot password?'}
+                    </button>
 
                     <button
                         type="submit"
@@ -107,36 +130,9 @@ export default function LoginPage() {
                         disabled={loading}
                         id="btn-login"
                     >
-                        {loading ? <span className="spinner" /> : 'Sign In'}
-                    </button>
-
-                    <button
-                        type="button"
-                        className="btn btn-secondary btn-full mt-2"
-                        onClick={async () => {
-                            setLoading(true);
-                            const { error: te } = await signInAsTest();
-                            if (te) setError(te.message);
-                            else navigate('/dashboard');
-                            setLoading(false);
-                        }}
-                        style={{ borderStyle: 'dashed', background: 'transparent' }}
-                    >
-                        🚀 Bypass Rate Limit (Test Login)
+                        {loading ? <span className="spinner" /> : recoveryMode ? 'Send Reset Link' : 'Sign In'}
                     </button>
                 </form>
-
-                <p style={{
-                    textAlign: 'center',
-                    marginTop: '1.5rem',
-                    fontSize: '0.88rem',
-                    color: 'var(--gray-500)'
-                }}>
-                    Don't have an account?{' '}
-                    <Link to="/auth/signup" style={{ color: 'var(--green-600)', fontWeight: 600 }}>
-                        Create School Account
-                    </Link>
-                </p>
             </div>
         </div>
     );
