@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { buildTimeSlots, generateTimetable } from '../../lib/timetable/generator';
+import { buildTimeSlots, generateTimetable, getBreakSlots } from '../../lib/timetable/generator';
 import { downloadTimetablePdf, getEntriesForClass, getEntriesForTeacher } from '../../lib/timetable/pdf';
 import type {
     GeneratedEntry, LessonAssignment, TimetableBreak,
@@ -66,10 +66,29 @@ export default function TimetablePage() {
         [years]
     );
 
+    // Compute time slots for displaying time in timetable
+    const timeSlots = useMemo(() => {
+        if (!settings.school_start_time || !settings.lesson_duration_minutes || !settings.periods_per_day) {
+            return [];
+        }
+        return buildTimeSlots(settings as TimetableSettings);
+    }, [settings.school_start_time, settings.lesson_duration_minutes, settings.periods_per_day, settings.breaks, settings.working_days, settings.school_end_time]);
+
+    // Compute periods including breaks - use timeSlots to determine the actual number of periods
     const periods = useMemo(() => {
+        if (timeSlots.length > 0) {
+            // Get unique period numbers from timeSlots
+            const uniquePeriods = [...new Set(timeSlots.map(s => s.period))];
+            return uniquePeriods.sort((a, b) => a - b);
+        }
         const p = settings.periods_per_day || 7;
         return Array.from({ length: p }, (_, i) => i + 1);
-    }, [settings.periods_per_day]);
+    }, [timeSlots, settings.periods_per_day]);
+
+    // Compute break slots for displaying breaks in timetable
+    const breakSlots = useMemo(() => {
+        return getBreakSlots(settings as TimetableSettings);
+    }, [settings.breaks, settings.working_days]);
 
     const workingDays = settings.working_days || [0, 1, 2, 3, 4];
 
@@ -399,6 +418,9 @@ export default function TimetablePage() {
             filterName,
             periods,
             workingDays,
+            breaks: settings.breaks,
+            timeSlots,
+            classes,
         });
     };
 
@@ -812,6 +834,10 @@ export default function TimetablePage() {
                                     workingDays={workingDays}
                                     periods={periods}
                                     viewType={viewMode}
+                                    breaks={settings.breaks}
+                                    timeSlots={timeSlots}
+                                    breakSlots={breakSlots}
+                                    classes={classes}
                                 />
                             ) : (
                                 <p className="text-center text-muted p-8">Select a {viewMode} to view their timetable.</p>

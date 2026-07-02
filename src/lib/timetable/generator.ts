@@ -65,6 +65,30 @@ export function buildTimeSlots(settings: TimetableSettings): TimeSlot[] {
     return slots;
 }
 
+// Get break slots that can be inserted into the timetable
+export function getBreakSlots(settings: TimetableSettings): TimeSlot[] {
+    const slots: TimeSlot[] = [];
+    const breaks = [...(settings.breaks || [])].sort(
+        (a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+    );
+
+    for (const day of settings.working_days) {
+        for (let i = 0; i < breaks.length; i++) {
+            const brk = breaks[i];
+            slots.push({
+                day,
+                dayName: DAY_NAMES[day] || `Day ${day}`,
+                period: 100 + i, // Use high numbers to identify breaks
+                start_time: brk.start_time,
+                end_time: brk.end_time,
+                key: `${day}-break-${i}`,
+            });
+        }
+    }
+
+    return slots;
+}
+
 export interface GeneratorInput {
     settings: TimetableSettings;
     assignments: LessonAssignment[];

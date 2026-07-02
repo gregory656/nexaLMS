@@ -1580,6 +1580,81 @@ h4 { font-size: 1.125rem; }
   to { transform: rotate(360deg); }
 }
 
+/* Master Timetable View Styles */
+.master-timetable-scroll {
+  overflow-x: auto;
+}
+
+.master-day-section {
+  margin-bottom: 2rem;
+}
+
+.master-day-section:last-child {
+  margin-bottom: 0;
+}
+
+.master-day-header {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--green-700);
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 2px solid var(--green-500);
+}
+
+.master-table {
+  min-width: 600px;
+}
+
+.tt-class-col {
+  background: var(--green-50);
+  font-weight: 700;
+  text-align: center;
+  width: 120px;
+  min-width: 100px;
+  border: 1px solid var(--gray-200);
+  padding: 0.75rem 0.5rem;
+}
+
+.tt-class-cell {
+  background: var(--gray-50);
+  font-weight: 600;
+  text-align: center;
+  width: 120px;
+  min-width: 100px;
+  border: 1px solid var(--gray-200);
+  padding: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.tt-period-break {
+  background: var(--gray-100) !important;
+  min-width: 80px;
+}
+
+.period-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.period-num {
+  font-weight: 700;
+}
+
+.break-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.break-header .break-name {
+  font-weight: 600;
+  color: var(--warning);
+  font-size: 0.75rem;
+}
+
 .loading-screen {
   min-height: 100vh;
   display: flex;
@@ -1781,6 +1856,32 @@ h4 { font-size: 1.125rem; }
   border-radius: 0 var(--radius-md) 0 0;
 }
 
+.tt-time-col {
+  background: var(--gray-50);
+  font-weight: 700;
+  text-align: center;
+  width: 100px;
+  border: 1px solid var(--gray-200);
+  padding: 0.75rem 0.5rem;
+}
+
+.tt-time-cell {
+  background: var(--gray-50);
+  font-weight: 600;
+  text-align: center;
+  width: 100px;
+  border: 1px solid var(--gray-200);
+  padding: 0.5rem;
+  vertical-align: middle;
+}
+
+.tt-time-label {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--green-700);
+  font-weight: 600;
+}
+
 .tt-period-col {
   background: var(--gray-50);
   font-weight: 700;
@@ -1791,12 +1892,67 @@ h4 { font-size: 1.125rem; }
 }
 
 .tt-period-num {
-  display: inline-block;
+  display: block;
   background: var(--green-100);
   color: var(--green-800);
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
+}
+
+.tt-period-time {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--gray-500);
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+.tt-period-time-primary {
+  color: var(--gray-700);
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.tt-break-row {
+  background: var(--gray-50);
+}
+
+.tt-break-cell {
+  background: var(--gray-100) !important;
+  border-top: 2px solid var(--gray-300);
+}
+
+.tt-break-name {
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--gray-600);
+}
+
+.tt-break-block {
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem 0;
+  border-bottom: 1px dashed var(--gray-200);
+  margin-bottom: 0.15rem;
+}
+
+.tt-break-block:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.tt-break-label {
+  font-weight: 600;
+  font-size: 0.7rem;
+  color: var(--warning);
+}
+
+.tt-break-time {
+  font-size: 0.65rem;
+  color: var(--gray-500);
 }
 
 .tt-cell {
