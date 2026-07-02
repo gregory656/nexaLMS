@@ -20,6 +20,7 @@ import SubjectsPage from './pages/academics/SubjectsPage';
 import HousesPage from './pages/academics/HousesPage';
 import AcademicYearsPage from './pages/academics/AcademicYearsPage';
 import DepartmentsPage from './pages/academics/DepartmentsPage';
+import TimetablePage from './pages/academics/TimetablePage';
 import AlumniPage from './pages/alumni/AlumniPage';
 import RolesPage from './pages/roles/RolesPage';
 import SubscriptionPage from './pages/subscription/SubscriptionPage';
@@ -94,7 +95,7 @@ export default function App() {
               <Route path="academics/houses" element={<HousesPage />} />
               <Route path="academics/years" element={<AcademicYearsPage />} />
               <Route path="academics/departments" element={<DepartmentsPage />} />
-              <Route path="academics/timetable" element={<Placeholder title="Timetable" />} />
+              <Route path="academics/timetable" element={<TimetablePage />} />
 
               {/* Assessment */}
               <Route path="exams" element={<Placeholder title="Examinations" />} />

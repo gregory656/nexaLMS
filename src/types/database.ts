@@ -212,6 +212,7 @@ export interface Subject {
     category?: string;         // e.g. "Sciences", "Languages"
     department_id?: string;
     is_compulsory: boolean;
+    lessons_per_week?: number;
     created_at: string;
 }
 
@@ -309,6 +310,7 @@ export interface TeacherSubjectAssignment {
     class_id?: string;
     academic_year_id: string;
     school_id: string;
+    lessons_per_week?: number;
     created_at: string;
 }
 
@@ -459,9 +461,15 @@ export interface Timetable {
     id: string;
     school_id: string;
     academic_year_id: string;
-    term_id: string;
+    term_id?: string;
+    term_name?: string;
     name: string;
+    version?: number;
+    status?: 'draft' | 'published' | 'archived';
     is_active: boolean;
+    generated_at?: string;
+    generated_by?: string;
+    settings_snapshot?: Record<string, unknown>;
     created_at: string;
 }
 
@@ -471,12 +479,33 @@ export interface TimetableEntry {
     class_id: string;
     subject_id: string;
     teacher_id: string;
-    day_of_week: number;       // 0=Mon, 1=Tue ... 4=Fri
+    day_of_week: number;       // 0=Mon ... 6=Sun
+    period_number?: number;
     start_time: string;
     end_time: string;
     room?: string;
     school_id: string;
     created_at: string;
+}
+
+export interface TimetableSettings {
+    id: string;
+    school_id: string;
+    academic_year_id: string;
+    term_name: string;
+    name: string;
+    working_days: number[];
+    lesson_duration_minutes: number;
+    periods_per_day: number;
+    school_start_time: string;
+    school_end_time: string;
+    min_teacher_lessons_per_day: number;
+    max_teacher_lessons_per_day: number;
+    min_class_lessons_per_day: number;
+    max_class_lessons_per_day: number;
+    breaks: { name: string; start_time: string; end_time: string }[];
+    created_at: string;
+    updated_at: string;
 }
 
 // ====== COMMUNICATION ======

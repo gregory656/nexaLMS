@@ -13,7 +13,7 @@ export default function SubjectsPage() {
     const [showModal, setShowModal] = useState(false);
     const [editing, setEditing] = useState<any>(null);
     const [saving, setSaving] = useState(false);
-    const [formData, setFormData] = useState({ name: '', code: '', department_id: '', is_compulsory: true });
+    const [formData, setFormData] = useState({ name: '', code: '', department_id: '', is_compulsory: true, lessons_per_week: '5' });
 
     const fetchAll = async () => {
         if (!school?.id) return;
@@ -37,7 +37,8 @@ export default function SubjectsPage() {
             code: subject.code || '',
             department_id: subject.department_id || '',
             is_compulsory: subject.is_compulsory,
-        } : { name: '', code: '', department_id: departments[0]?.id || '', is_compulsory: true });
+            lessons_per_week: String(subject.lessons_per_week || 5),
+        } : { name: '', code: '', department_id: departments[0]?.id || '', is_compulsory: true, lessons_per_week: '5' });
         setShowModal(true);
     };
 
@@ -54,6 +55,7 @@ export default function SubjectsPage() {
             category: department?.name || null,
             department_id: formData.department_id,
             is_compulsory: formData.is_compulsory,
+            lessons_per_week: parseInt(formData.lessons_per_week, 10) || 5,
             school_id: school!.id,
         };
         const { error } = editing
@@ -111,6 +113,7 @@ export default function SubjectsPage() {
                                     <th>Subject Name</th>
                                     <th>Code</th>
                                     <th>Department</th>
+                                    <th>Lessons/Week</th>
                                     <th>Compulsory</th>
                                     <th>Actions</th>
                                 </tr>
@@ -121,6 +124,7 @@ export default function SubjectsPage() {
                                         <td><strong>{subject.name}</strong></td>
                                         <td>{subject.code || '-'}</td>
                                         <td><span className="badge badge-blue">{subject.departments?.name || subject.category || '-'}</span></td>
+                                        <td><span className="badge badge-green">{subject.lessons_per_week || 5}</span></td>
                                         <td>{subject.is_compulsory ? 'Yes' : '-'}</td>
                                         <td>
                                             <button className="btn btn-ghost btn-sm" onClick={() => openModal(subject)}><Edit2 size={16} /></button>
@@ -175,6 +179,17 @@ export default function SubjectsPage() {
                                         ))}
                                     </select>
                                 </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Weekly Lessons (for timetable)</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    min={1}
+                                    max={20}
+                                    value={formData.lessons_per_week}
+                                    onChange={e => setFormData({ ...formData, lessons_per_week: e.target.value })}
+                                />
                             </div>
                             <div className="form-group flex items-center gap-2 mt-2">
                                 <input

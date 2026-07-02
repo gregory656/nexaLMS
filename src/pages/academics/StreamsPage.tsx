@@ -27,6 +27,14 @@ export default function StreamsPage() {
     const [classYearId, setClassYearId] = useState('');
     const [saving, setSaving] = useState(false);
 
+    // Edit state
+    const [editingStream, setEditingStream] = useState<any>(null);
+    const [editingGrade, setEditingGrade] = useState<any>(null);
+    const [editingClass, setEditingClass] = useState<any>(null);
+    const [editStreamName, setEditStreamName] = useState('');
+    const [editGradeName, setEditGradeName] = useState('');
+    const [editGradeOrder, setEditGradeOrder] = useState('1');
+
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
@@ -135,6 +143,99 @@ export default function StreamsPage() {
         }
     };
 
+    const handleEditStream = async () => {
+        if (!editingStream || !editStreamName.trim()) return;
+        setSaving(true);
+        const { error } = await supabase.from('streams').update({ name: editStreamName.trim() }).eq('id', editingStream.id);
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Stream updated');
+            setEditingStream(null);
+            await fetchAll();
+        }
+        setSaving(false);
+    };
+
+    const handleDeleteStream = async (stream: any) => {
+        if (!confirm(`Delete stream "${stream.name}"?`)) return;
+        const { error } = await supabase.from('streams').delete().eq('id', stream.id);
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Stream deleted');
+            await fetchAll();
+        }
+    };
+
+    const openEditGrade = (grade: any) => {
+        setEditingGrade(grade);
+        setEditGradeName(grade.name);
+        setEditGradeOrder(String(grade.level_order));
+    };
+
+    const handleEditGrade = async () => {
+        if (!editingGrade || !editGradeName.trim()) return;
+        setSaving(true);
+        const { error } = await supabase.from('grade_levels').update({
+            name: editGradeName.trim(),
+            level_order: parseInt(editGradeOrder, 10) || 1,
+        }).eq('id', editingGrade.id);
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Grade level updated');
+            setEditingGrade(null);
+            await fetchAll();
+        }
+        setSaving(false);
+    };
+
+    const handleDeleteGrade = async (grade: any) => {
+        if (!confirm(`Delete grade "${grade.name}"?`)) return;
+        const { error } = await supabase.from('grade_levels').delete().eq('id', grade.id);
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Grade level deleted');
+            await fetchAll();
+        }
+    };
+
+    const openEditClass = (cls: any) => {
+        setEditingClass(cls);
+        setClassGradeId(cls.grade_level_id);
+        setClassStreamId(cls.stream_id);
+        setClassYearId(cls.academic_year_id);
+    };
+
+    const handleEditClass = async () => {
+        if (!editingClass || !classGradeId || !classStreamId) return;
+        setSaving(true);
+        const grade = grades.find(g => g.id === classGradeId);
+        const stream = streams.find(s => s.id === classStreamId);
+        const name = `${grade?.name} ${stream?.name}`.trim();
+        const { error } = await supabase.from('classes').update({
+            grade_level_id: classGradeId,
+            stream_id: classStreamId,
+            academic_year_id: classYearId,
+            name,
+        }).eq('id', editingClass.id);
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Class updated');
+            setEditingClass(null);
+            await fetchAll();
+        }
+        setSaving(false);
+    };
+
+    const handleDeleteClass = async (cls: any) => {
+        if (!confirm(`Delete class "${cls.name}"?`)) return;
+        const { error } = await supabase.from('classes').delete().eq('id', cls.id);
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Class deleted');
+            await fetchAll();
+        }
+    };
+
     return (
         <>
             <div className="page-header">
@@ -181,7 +282,15 @@ export default function StreamsPage() {
                         {activeTab === 'streams' && (
                             <div className="grid-4">
                                 {streams.map(s => (
-                                    <div key={s.id} className="card" style={{ background: 'var(--gray-50)', textAlign: 'center' }}>
+                                    <div key={s.id} className="card" style={{ background: 'var(--gray-50)', textAlign: 'center', position: 'relative' }}>
+                                        <div className="flex justify-end gap-1" style={{ position: 'absolute', top: 8, right: 8 }}>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingStream(s); setEditStreamName(s.name); }} title="Edit">
+                                                <Edit2 size={14} />
+                                            </button>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteStream(s)} style={{ color: 'var(--danger)' }} title="Delete">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
                                         <Home size={24} style={{ color: 'var(--green-600)', margin: '0 auto 0.5rem' }} />
                                         <h4 className="font-bold">{s.name}</h4>
                                         <p className="text-xs text-muted mt-1">Stream</p>
@@ -206,7 +315,10 @@ export default function StreamsPage() {
                                             <tr key={g.id}>
                                                 <td>{g.level_order}</td>
                                                 <td><strong>{g.name}</strong></td>
-                                                <td><button className="btn btn-ghost btn-sm"><Edit2 size={14} /></button></td>
+                                                <td>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => openEditGrade(g)}><Edit2 size={14} /></button>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteGrade(g)} style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -232,8 +344,8 @@ export default function StreamsPage() {
                                                 <td>{c.grade_levels?.name}</td>
                                                 <td>{c.streams?.name}</td>
                                                 <td>
-                                                    <button className="btn btn-ghost btn-sm"><Edit2 size={14} /></button>
-                                                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => openEditClass(c)}><Edit2 size={14} /></button>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteClass(c)} style={{ color: 'var(--danger)' }}><Trash2 size={14} /></button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -355,6 +467,96 @@ export default function StreamsPage() {
                             <button className="btn btn-secondary" onClick={() => setShowClassModal(false)}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleAddClass} disabled={saving || !classGradeId || !classStreamId}>
                                 {saving ? <span className="spinner" /> : 'Create Class Group'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Stream Modal */}
+            {editingStream && (
+                <div className="modal-overlay" onClick={() => setEditingStream(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Edit Stream</h3>
+                            <button className="modal-close" onClick={() => setEditingStream(null)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Stream Name</label>
+                                <input className="form-input" value={editStreamName} onChange={e => setEditStreamName(e.target.value)} autoFocus />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setEditingStream(null)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleEditStream} disabled={saving || !editStreamName.trim()}>
+                                {saving ? <span className="spinner" /> : 'Update Stream'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Grade Modal */}
+            {editingGrade && (
+                <div className="modal-overlay" onClick={() => setEditingGrade(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Edit Grade Level</h3>
+                            <button className="modal-close" onClick={() => setEditingGrade(null)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Grade Name</label>
+                                <input className="form-input" value={editGradeName} onChange={e => setEditGradeName(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Level Order</label>
+                                <input className="form-input" type="number" value={editGradeOrder} onChange={e => setEditGradeOrder(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setEditingGrade(null)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleEditGrade} disabled={saving || !editGradeName.trim()}>
+                                {saving ? <span className="spinner" /> : 'Update Grade'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Class Modal */}
+            {editingClass && (
+                <div className="modal-overlay" onClick={() => setEditingClass(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Edit Class Group</h3>
+                            <button className="modal-close" onClick={() => setEditingClass(null)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Grade Level</label>
+                                <select className="form-select" value={classGradeId} onChange={e => setClassGradeId(e.target.value)}>
+                                    {grades.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Stream</label>
+                                <select className="form-select" value={classStreamId} onChange={e => setClassStreamId(e.target.value)}>
+                                    {streams.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Academic Year</label>
+                                <select className="form-select" value={classYearId} onChange={e => setClassYearId(e.target.value)}>
+                                    {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setEditingClass(null)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleEditClass} disabled={saving}>
+                                {saving ? <span className="spinner" /> : 'Update Class'}
                             </button>
                         </div>
                     </div>

@@ -1663,3 +1663,255 @@ h4 { font-size: 1.125rem; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ============================================
+   Auth Contact Card
+   ============================================ */
+.auth-contact-card {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.06));
+  border: 1px solid var(--gray-100);
+  text-align: center;
+}
+
+.auth-contact-label {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  margin-bottom: 0.35rem;
+}
+
+.auth-contact-phone {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gray-800);
+  text-decoration: none;
+  margin-bottom: 0.75rem;
+}
+
+.auth-contact-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.auth-contact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.auth-contact-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.auth-contact-btn.call {
+  background: var(--blue-50, #eff6ff);
+  color: var(--blue-700, #1d4ed8);
+  border: 1px solid var(--blue-200, #bfdbfe);
+}
+
+.auth-contact-btn.whatsapp {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+/* ============================================
+   Timetable Module
+   ============================================ */
+.tt-day-picker {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tt-day-btn {
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tt-day-btn.active {
+  background: var(--green-600);
+  color: white;
+  border-color: var(--green-600);
+}
+
+.timetable-grid-wrapper {
+  overflow-x: auto;
+  padding: 0.5rem;
+}
+
+.timetable-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+}
+
+.timetable-grid th {
+  background: linear-gradient(135deg, var(--green-600), var(--green-700));
+  color: white;
+  padding: 0.75rem 0.5rem;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid var(--green-700);
+}
+
+.timetable-grid th:first-child {
+  border-radius: var(--radius-md) 0 0 0;
+}
+
+.timetable-grid th:last-child {
+  border-radius: 0 var(--radius-md) 0 0;
+}
+
+.tt-period-col {
+  background: var(--gray-50);
+  font-weight: 700;
+  text-align: center;
+  width: 60px;
+  border: 1px solid var(--gray-200);
+  padding: 0.5rem;
+}
+
+.tt-period-num {
+  display: inline-block;
+  background: var(--green-100);
+  color: var(--green-800);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+}
+
+.tt-cell {
+  border: 1px solid var(--gray-200);
+  padding: 0.5rem;
+  text-align: center;
+  vertical-align: middle;
+  min-width: 100px;
+  min-height: 60px;
+  background: var(--white);
+  transition: background 0.15s;
+}
+
+.tt-cell:hover {
+  background: var(--green-50);
+}
+
+.tt-cell-master {
+  text-align: left;
+  vertical-align: top;
+  min-width: 140px;
+}
+
+.tt-lesson-block {
+  padding: 0.35rem;
+}
+
+.tt-class {
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: var(--green-700);
+}
+
+.tt-subject {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.tt-teacher {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+  margin-top: 0.15rem;
+}
+
+.tt-empty {
+  color: var(--gray-300);
+}
+
+.tt-preview-header {
+  text-align: center;
+  padding: 1.5rem 1rem 1rem;
+  border-bottom: 1px solid var(--gray-100);
+  margin-bottom: 0.5rem;
+}
+
+.tt-preview-header h2 {
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.25rem;
+}
+
+.tt-preview-header h3 {
+  font-size: 0.95rem;
+  color: var(--green-600);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+.tt-filter-name {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.timetable-generate-card {
+  min-height: 320px;
+}
+
+.tt-progress-bar {
+  height: 8px;
+  background: var(--gray-200);
+  border-radius: 999px;
+  overflow: hidden;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.tt-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--green-500), var(--green-600));
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.tt-progress-ring {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 6px solid var(--gray-200);
+  border-top-color: var(--green-600);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  animation: spin 1s linear infinite;
+}
+
+.tt-progress-pct {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--green-700);
+  animation: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
