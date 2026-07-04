@@ -43,6 +43,8 @@ export default function ExamsPage() {
     const [gradeForm, setGradeForm] = useState({
         grade: '', min_marks: '', max_marks: '', points: '', remarks: '',
     });
+    const [newExamType, setNewExamType] = useState('');
+    const [newTerm, setNewTerm] = useState('');
     const [saving, setSaving] = useState(false);
 
     // Marks entry state
@@ -102,15 +104,35 @@ export default function ExamsPage() {
 
     // ─── EXAM SETUP HANDLERS ───
     const handleCreateExam = async () => {
-        if (!setupForm.name || !setupForm.exam_type_id || !setupForm.term_id || !setupForm.academic_year_id) {
+        let typeId = setupForm.exam_type_id;
+        let tId = setupForm.term_id;
+
+        if (!setupForm.name || !setupForm.academic_year_id) {
             toast.error('Fill in all required fields'); return;
         }
+
         setSaving(true);
+        if (typeId === 'new' && newExamType) {
+            const { data, error } = await supabase.from('exam_types').insert({ school_id: school!.id, name: newExamType }).select().single();
+            if (error) { toast.error(error.message); setSaving(false); return; }
+            typeId = data.id;
+        }
+
+        if (tId === 'new' && newTerm) {
+            const { data, error } = await supabase.from('terms').insert({ school_id: school!.id, name: newTerm, term_number: terms.length + 1, academic_year_id: setupForm.academic_year_id, start_date: setupForm.start_date || new Date().toISOString(), end_date: setupForm.end_date || new Date().toISOString() }).select().single();
+            if (error) { toast.error(error.message); setSaving(false); return; }
+            tId = data.id;
+        }
+
+        if (!typeId || !tId) {
+            toast.error('Exam Type and Term are required'); setSaving(false); return;
+        }
+
         const { error } = await supabase.from('exams').insert({
-            school_id: school!.id, ...setupForm, status: 'scheduled',
+            school_id: school!.id, name: setupForm.name, exam_type_id: typeId, term_id: tId, academic_year_id: setupForm.academic_year_id, start_date: setupForm.start_date, end_date: setupForm.end_date, status: 'scheduled',
         });
         if (error) toast.error(error.message);
-        else { toast.success('Exam created'); setShowSetupModal(false); setSetupForm({ name: '', exam_type_id: '', term_id: '', academic_year_id: '', start_date: '', end_date: '' }); await fetchAll(); }
+        else { toast.success('Exam created'); setShowSetupModal(false); setSetupForm({ name: '', exam_type_id: '', term_id: '', academic_year_id: '', start_date: '', end_date: '' }); setNewExamType(''); setNewTerm(''); await fetchAll(); }
         setSaving(false);
     };
 
@@ -392,8 +414,24 @@ export default function ExamsPage() {
                         <div className="modal-body">
                             <div className="form-group"><label className="form-label">Exam Name *</label><input className="form-input" placeholder="e.g. End Term 1 2026" value={setupForm.name} onChange={e => setSetupForm(p => ({ ...p, name: e.target.value }))} /></div>
                             <div className="grid-2">
-                                <div className="form-group"><label className="form-label">Exam Type *</label><select className="form-select" value={setupForm.exam_type_id} onChange={e => setSetupForm(p => ({ ...p, exam_type_id: e.target.value }))}><option value="">Select</option>{examTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-                                <div className="form-group"><label className="form-label">Term *</label><select className="form-select" value={setupForm.term_id} onChange={e => setSetupForm(p => ({ ...p, term_id: e.target.value }))}><option value="">Select</option>{terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+                                <div className="form-group">
+                                    <label className="form-label">Exam Type *</label>
+                                    <select className="form-select" value={setupForm.exam_type_id} onChange={e => setSetupForm(p => ({ ...p, exam_type_id: e.target.value }))}>
+                                        <option value="">Select</option>
+                                        <option value="new">+ Add New Type</option>
+                                        {examTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                    {setupForm.exam_type_id === 'new' && <input className="form-input mt-2" placeholder="e.g CAT" value={newExamType} onChange={e => setNewExamType(e.target.value)} />}
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Term *</label>
+                                    <select className="form-select" value={setupForm.term_id} onChange={e => setSetupForm(p => ({ ...p, term_id: e.target.value }))}>
+                                        <option value="">Select</option>
+                                        <option value="new">+ Add New Term</option>
+                                        {terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                    {setupForm.term_id === 'new' && <input className="form-input mt-2" placeholder="e.g Term 1" value={newTerm} onChange={e => setNewTerm(e.target.value)} />}
+                                </div>
                             </div>
                             <div className="form-group"><label className="form-label">Academic Year *</label><select className="form-select" value={setupForm.academic_year_id} onChange={e => setSetupForm(p => ({ ...p, academic_year_id: e.target.value }))}><option value="">Select</option>{academicYears.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}</select></div>
                             <div className="grid-2">

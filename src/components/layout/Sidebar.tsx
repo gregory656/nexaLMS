@@ -19,8 +19,10 @@ const navSections = [
         title: 'People',
         items: [
             { to: '/students', icon: GraduationCap, label: 'Students' },
+            { to: '/student-leaders', icon: Shield, label: 'Student Leaders' },
             { to: '/staff', icon: Users, label: 'Staff / Teachers' },
-            { to: '/guardians', icon: UserCheck, label: 'Guardians & Parents' },
+            { to: '/duty-roster', icon: ClipboardList, label: 'Duty Roster' },
+            { to: '/guardians', icon: UserCheck, label: 'Guardians' },
             { to: '/alumni', icon: GraduationCap, label: 'Alumni' },
         ]
     },

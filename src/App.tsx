@@ -10,10 +10,13 @@ import DashboardLayout from './components/layout/DashboardLayout';
 // Pages
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
+import InviteAcceptPage from './pages/auth/InviteAcceptPage';
 import SetupPage from './pages/setup/SetupPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import StudentsPage from './pages/students/StudentsPage';
+import StudentLeadersPage from './pages/students/StudentLeadersPage';
 import StaffPage from './pages/staff/StaffPage';
+import DutyRosterPage from './pages/staff/DutyRosterPage';
 import GuardiansPage from './pages/guardians/GuardiansPage';
 import StreamsPage from './pages/academics/StreamsPage';
 import SubjectsPage from './pages/academics/SubjectsPage';
@@ -70,6 +73,7 @@ export default function App() {
             {/* Public Auth Routes */}
             <Route path="/auth/login" element={<LoginPage />} />
             <Route path="/auth/signup" element={<SignupPage />} />
+            <Route path="/auth/create-account" element={<InviteAcceptPage />} />
 
             {/* Setup Wizard */}
             <Route path="/setup" element={
@@ -89,7 +93,9 @@ export default function App() {
 
               {/* People */}
               <Route path="students" element={<StudentsPage />} />
+              <Route path="student-leaders" element={<StudentLeadersPage />} />
               <Route path="staff" element={<StaffPage />} />
+              <Route path="duty-roster" element={<DutyRosterPage />} />
               <Route path="guardians" element={<GuardiansPage />} />
               <Route path="alumni" element={<AlumniPage />} />
 

@@ -32,7 +32,7 @@ export default function FinancePage() {
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [showFeeModal, setShowFeeModal] = useState(false);
     const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
-    const [feeForm, setFeeForm] = useState({ grade_level_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
+    const [feeForm, setFeeForm] = useState({ target_type: 'grade', grade_level_id: '', student_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
     const [saving, setSaving] = useState(false);
 
     const fetchAll = async () => {
@@ -74,14 +74,28 @@ export default function FinancePage() {
     };
 
     const handleCreateFee = async () => {
-        if (!feeForm.grade_level_id || !feeForm.academic_year_id || !feeForm.fee_category_id || !feeForm.amount) { toast.error('Fill all required fields'); return; }
+        if (!feeForm.academic_year_id || !feeForm.fee_category_id || !feeForm.amount) { toast.error('Fill all required fields'); return; }
+        if (feeForm.target_type === 'grade' && !feeForm.grade_level_id) { toast.error('Select a grade level'); return; }
+        if (feeForm.target_type === 'individual' && !feeForm.student_id) { toast.error('Select a student'); return; }
+
         setSaving(true);
         const { error } = await supabase.from('fee_structures').insert({
-            school_id: school!.id, grade_level_id: feeForm.grade_level_id, academic_year_id: feeForm.academic_year_id,
-            term_id: feeForm.term_id || null, fee_category_id: feeForm.fee_category_id,
-            amount: parseFloat(feeForm.amount), is_optional: feeForm.is_optional,
+            school_id: school!.id,
+            grade_level_id: feeForm.target_type === 'grade' ? feeForm.grade_level_id : null,
+            student_id: feeForm.target_type === 'individual' ? feeForm.student_id : null,
+            academic_year_id: feeForm.academic_year_id,
+            term_id: feeForm.term_id || null,
+            fee_category_id: feeForm.fee_category_id,
+            amount: parseFloat(feeForm.amount),
+            is_optional: feeForm.is_optional,
         });
-        if (error) toast.error(error.message); else { toast.success('Fee added'); setShowFeeModal(false); setFeeForm({ grade_level_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false }); await fetchAll(); }
+        if (error) toast.error(error.message);
+        else {
+            toast.success('Fee added');
+            setShowFeeModal(false);
+            setFeeForm({ target_type: 'grade', grade_level_id: '', student_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
+            await fetchAll();
+        }
         setSaving(false);
     };
 
@@ -136,9 +150,11 @@ export default function FinancePage() {
                 {feeStructures.length === 0 ? (
                     <div className="empty-state"><h3>No fee structures defined</h3><p>Click "Add Fee" to define fees per grade level per term.</p></div>
                 ) : (
-                    <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>Category</th><th>Grade</th><th>Year</th><th>Term</th><th>Amount</th><th>Optional?</th></tr></thead><tbody>
+                    <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>Category</th><th>Target</th><th>Year</th><th>Term</th><th>Amount</th><th>Optional?</th></tr></thead><tbody>
                         {feeStructures.map((fs, i) => (
-                            <tr key={fs.id}><td>{i + 1}</td><td><strong>{fs.fee_categories?.name}</strong></td><td>{fs.grade_levels?.name || '—'}</td><td>{fs.academic_years?.name || '—'}</td><td>{fs.terms?.name || 'All'}</td><td>KES {Number(fs.amount).toLocaleString()}</td><td>{fs.is_optional ? <span className="badge badge-orange">Optional</span> : <span className="badge badge-green">Required</span>}</td></tr>
+                            <tr key={fs.id}><td>{i + 1}</td><td><strong>{fs.fee_categories?.name}</strong></td>
+                                <td>{fs.grade_levels?.name || fs.students ? `Student: ${fs.students.first_name}` : 'All Students'}</td>
+                                <td>{fs.academic_years?.name || '—'}</td><td>{fs.terms?.name || 'All'}</td><td>KES {Number(fs.amount).toLocaleString()}</td><td>{fs.is_optional ? <span className="badge badge-orange">Optional</span> : <span className="badge badge-green">Required</span>}</td></tr>
                         ))}
                     </tbody></table></div>
                 )}
@@ -221,9 +237,21 @@ export default function FinancePage() {
                     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
                         <div className="modal-header"><h3 className="modal-title">📋 Add Fee to Structure</h3><button className="modal-close" onClick={() => setShowFeeModal(false)}><X size={18} /></button></div>
                         <div className="modal-body">
+                            <div className="form-group"><label className="form-label">Category *</label><select className="form-select" value={feeForm.fee_category_id} onChange={e => setFeeForm(p => ({ ...p, fee_category_id: e.target.value }))}><option value="">Select</option>{feeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                             <div className="grid-2">
-                                <div className="form-group"><label className="form-label">Category *</label><select className="form-select" value={feeForm.fee_category_id} onChange={e => setFeeForm(p => ({ ...p, fee_category_id: e.target.value }))}><option value="">Select</option>{feeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                                <div className="form-group"><label className="form-label">Grade Level *</label><select className="form-select" value={feeForm.grade_level_id} onChange={e => setFeeForm(p => ({ ...p, grade_level_id: e.target.value }))}><option value="">Select</option>{gradeLevels.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></div>
+                                <div className="form-group"><label className="form-label">Target *</label>
+                                    <select className="form-select" value={feeForm.target_type} onChange={e => setFeeForm(p => ({ ...p, target_type: e.target.value }))}>
+                                        <option value="grade">Specific Grade Level</option>
+                                        <option value="all">All Students</option>
+                                        <option value="individual">Individual Student</option>
+                                    </select>
+                                </div>
+                                {feeForm.target_type === 'grade' && (
+                                    <div className="form-group"><label className="form-label">Grade Level *</label><select className="form-select" value={feeForm.grade_level_id} onChange={e => setFeeForm(p => ({ ...p, grade_level_id: e.target.value }))}><option value="">Select Grade</option>{gradeLevels.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></div>
+                                )}
+                                {feeForm.target_type === 'individual' && (
+                                    <div className="form-group"><label className="form-label">Student *</label><select className="form-select" value={feeForm.student_id} onChange={e => setFeeForm(p => ({ ...p, student_id: e.target.value }))}><option value="">Select Student</option>{students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}</select></div>
+                                )}
                             </div>
                             <div className="grid-2">
                                 <div className="form-group"><label className="form-label">Academic Year *</label><select className="form-select" value={feeForm.academic_year_id} onChange={e => setFeeForm(p => ({ ...p, academic_year_id: e.target.value }))}><option value="">Select</option>{academicYears.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}</select></div>

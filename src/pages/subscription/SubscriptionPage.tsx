@@ -96,9 +96,20 @@ export default function SubscriptionPage() {
                             </div>
                         </div>
 
-                        <button className="btn btn-primary btn-full py-3" onClick={() => window.open('https://nexagen.co.ke/stkpush', '_blank')}>
-                            Pay Now via M-PESA
-                        </button>
+                        <div className="flex flex-col gap-3">
+                            <button className="btn btn-primary btn-full py-4 flex items-center justify-center gap-3 relative overflow-hidden"
+                                style={{ backgroundColor: '#25D366', borderColor: '#25D366' }}
+                                onClick={() => window.open('https://nexagen.co.ke/stkpush', '_blank')}>
+                                {/* Simple M-PESA text logo representation */}
+                                <div className="font-black italic tracking-tighter text-white" style={{ fontSize: '1.2rem', padding: '2px 6px', background: 'rgba(0,0,0,0.1)', borderRadius: '4px' }}>
+                                    M-PESA
+                                </div>
+                                <div className="flex flex-col items-start leading-tight">
+                                    <span className="font-bold text-sm">Pay via M-PESA</span>
+                                    <span className="text-xs opacity-90">0719637416 STEPEHEN OTIENO</span>
+                                </div>
+                            </button>
+                        </div>
                     </div>
 
                     <div className="card mt-6" style={{ background: 'var(--info-light)', borderColor: 'var(--info)' }}>
