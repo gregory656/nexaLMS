@@ -102,8 +102,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
+        // CAUGHT IT: Supabase's getSession() strips the hash fragment from the URL.
+        // We MUST intercept it synchronously on mount, before any auth logic runs.
+        const hash = window.location.hash;
+        const currentPath = window.location.pathname;
+
+        if (hash && (hash.includes('access_token') || hash.includes('type=invite') || hash.includes('type=recovery'))) {
+            if (currentPath !== '/auth/create-account') {
+                // Instantly bounce them to the correct page WITH the hash intact.
+                // Using window.location.replace to avoid React Router complexities here.
+                window.location.replace(`/auth/create-account${hash}`);
+                return;
+            }
+        }
+
         // Check if we're on the invite/create-account page
-        const isOnCreateAccountPage = window.location.pathname === '/auth/create-account';
+        const isOnCreateAccountPage = currentPath === '/auth/create-account';
 
         const init = async () => {
             // If on create-account page, don't interfere with the invite flow.
