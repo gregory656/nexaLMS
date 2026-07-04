@@ -44,7 +44,9 @@ function Placeholder({ title }: { title: string }) {
 
 // Protected Route Shield
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading, isSetupComplete } = useAuth();
+  const { user, loading, isSetupComplete, isInviteFlow } = useAuth();
+
+  console.log('ProtectedRoute check:', { user, loading, isSetupComplete, isInviteFlow, pathname: window.location.pathname });
 
   if (loading) return (
     <div className="loading-screen">
@@ -55,8 +57,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user) return <Navigate to="/auth/login" />;
 
-  // If user exists but school isn't setup, send to setup (unless they are on setup)
-  if (!isSetupComplete && window.location.pathname !== '/setup') {
+  // If user exists but school isn't setup, send to setup (unless they are on setup or in invite flow)
+  if (!isSetupComplete && window.location.pathname !== '/setup' && !isInviteFlow) {
+    console.log('Redirecting to setup - conditions met');
     return <Navigate to="/setup" />;
   }
 

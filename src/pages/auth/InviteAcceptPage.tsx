@@ -15,24 +15,25 @@ export default function InviteAcceptPage() {
     const [email, setEmail] = useState('');
 
     useEffect(() => {
+        console.log('InviteAcceptPage mounted, pathname:', window.location.pathname);
+        
         // Check if this is accessed from a valid invitation flow
         const checkInviteValidity = async () => {
-            // First check if there's an active session (Supabase auto-auths from email link)
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            console.log('Current session:', session);
-
             // Check URL hash for tokens (Supabase passes them here)
             const hash = window.location.hash;
             console.log('URL hash:', hash);
             
-            // If there's a hash with tokens, let Supabase handle it
+            // If there's a hash with tokens, let Supabase handle it automatically
             if (hash && (hash.includes('access_token') || hash.includes('type=invite'))) {
                 console.log('Found tokens in hash, waiting for Supabase to process...');
                 // Supabase will automatically process the hash and set the session
                 // We'll wait for the onAuthStateChange event
                 return;
             }
+
+            // Check if there's an active session (Supabase auto-auths from email link)
+            const { data: { session } } = await supabase.auth.getSession();
+            console.log('Current session:', session);
 
             // If no session and no hash tokens, redirect to login
             if (!session) {
@@ -47,6 +48,7 @@ export default function InviteAcceptPage() {
                 setEmail(session.user.email);
             }
             setValidInvite(true);
+            console.log('Setting validInvite to true');
         };
 
         checkInviteValidity();
@@ -55,11 +57,13 @@ export default function InviteAcceptPage() {
             console.log('Auth state changed:', event, session);
             
             if (event === 'SIGNED_IN' && session) {
+                console.log('User signed in, setting validInvite to true');
                 if (session.user?.email) {
                     setEmail(session.user.email);
                 }
                 setValidInvite(true);
             } else if (event === 'PASSWORD_RECOVERY' && session) {
+                console.log('Password recovery, setting validInvite to true');
                 if (session.user?.email) {
                     setEmail(session.user.email);
                 }

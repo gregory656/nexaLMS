@@ -8,6 +8,7 @@ interface AuthState {
     session: any;
     loading: boolean;
     isSetupComplete: boolean;
+    isInviteFlow: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session: null,
         loading: true,
         isSetupComplete: false,
+        isInviteFlow: false,
     });
 
     const fetchUser = async (userId: string) => {
@@ -54,11 +56,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .from('users')
             .select('*, schools(*)')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
 
         if (!error && data) {
             const { schools, ...user } = data as any;
             return { user, school: schools || null };
+        }
+
+        // If user not found in database (e.g., during invite flow), return null
+        // This allows the user to proceed to create-account page
+        if (error || !data) {
+            console.log('User not found in database, likely in invite flow');
+            // Return a minimal user object to prevent redirects
+            return { user: { id: userId } as any, school: null };
         }
 
         const user = await fetchUser(userId);
@@ -103,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     session,
                     loading: false,
                     isSetupComplete: school?.is_setup_complete ?? false,
+                    isInviteFlow: window.location.pathname === '/auth/create-account',
                 });
             } else {
                 setState(prev => ({ ...prev, loading: false }));
@@ -120,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         session,
                         loading: false,
                         isSetupComplete: school?.is_setup_complete ?? false,
+                        isInviteFlow: window.location.pathname === '/auth/create-account',
                     });
                 } else if (event === 'SIGNED_OUT') {
                     setState({
@@ -128,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         session: null,
                         loading: false,
                         isSetupComplete: false,
+                        isInviteFlow: false,
                     });
                 }
             }
@@ -209,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 session: { user: { id: user.id } },
                 loading: false,
                 isSetupComplete: school?.is_setup_complete ?? false,
+                isInviteFlow: false,
             });
             return { error: null };
         }
