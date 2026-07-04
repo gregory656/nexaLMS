@@ -17,63 +17,53 @@ export default function InviteAcceptPage() {
     useEffect(() => {
         // Check if this is accessed from a valid invitation flow
         const checkInviteValidity = async () => {
-            // Check for invitation-specific parameters
-            const accessToken = searchParams.get('access_token');
-            const refreshToken = searchParams.get('refresh_token');
-            const type = searchParams.get('type');
+            // First check if there's an active session (Supabase auto-auths from email link)
+            const { data: { session } } = await supabase.auth.getSession();
+            
+            console.log('Current session:', session);
 
-            // If no invitation tokens present, redirect to login
-            if (!accessToken && !refreshToken) {
+            // Check URL hash for tokens (Supabase passes them here)
+            const hash = window.location.hash;
+            console.log('URL hash:', hash);
+            
+            // If there's a hash with tokens, let Supabase handle it
+            if (hash && (hash.includes('access_token') || hash.includes('type=invite'))) {
+                console.log('Found tokens in hash, waiting for Supabase to process...');
+                // Supabase will automatically process the hash and set the session
+                // We'll wait for the onAuthStateChange event
+                return;
+            }
+
+            // If no session and no hash tokens, redirect to login
+            if (!session) {
+                console.log('No session found, redirecting to login');
                 toast.error("Invalid invitation link. Please use the link from your email.");
                 navigate('/auth/login');
                 return;
             }
 
-            // Set the session from URL parameters if present
-            if (accessToken && refreshToken) {
-                const { data, error } = await supabase.auth.setSession({
-                    access_token: accessToken,
-                    refresh_token: refreshToken,
-                });
-
-                if (error) {
-                    toast.error("Invalid or expired invitation link.");
-                    navigate('/auth/login');
-                    return;
-                }
-
-                if (data.session?.user?.email) {
-                    setEmail(data.session.user.email);
-                }
+            // Session exists - this is a valid invite flow
+            if (session.user?.email) {
+                setEmail(session.user.email);
             }
-
-            // Check current session
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            if (!session) {
-                toast.error("Invalid or expired invitation link.");
-                navigate('/auth/login');
-                return;
-            }
-
-            // Check if user already has a password set (account already created)
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                // Try to check if user already has password by attempting to get user metadata
-                // If user was just created via invite, they won't have a password yet
-                setEmail(user.email || '');
-            }
-
             setValidInvite(true);
         };
 
         checkInviteValidity();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-                if (session?.user?.email) {
+            console.log('Auth state changed:', event, session);
+            
+            if (event === 'SIGNED_IN' && session) {
+                if (session.user?.email) {
                     setEmail(session.user.email);
                 }
+                setValidInvite(true);
+            } else if (event === 'PASSWORD_RECOVERY' && session) {
+                if (session.user?.email) {
+                    setEmail(session.user.email);
+                }
+                setValidInvite(true);
             }
         });
 
