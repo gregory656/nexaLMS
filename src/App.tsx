@@ -46,6 +46,12 @@ function Placeholder({ title }: { title: string }) {
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, isSetupComplete, isInviteFlow } = useAuth();
 
+  // Intercept Supabase auth redirect URLs (like invite or recovery links)
+  // If the user lands on a protected route with a hash token, send them to the create account page
+  if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=invite') || window.location.hash.includes('type=recovery'))) {
+    return <Navigate to={`/auth/create-account${window.location.hash}`} replace />;
+  }
+
   if (loading) return (
     <div className="loading-screen">
       <div className="spinner" />
@@ -120,7 +126,7 @@ export default function App() {
               <Route path="subscription" element={<SubscriptionPage />} />
               <Route path="announcements" element={<Placeholder title="Announcements" />} />
               <Route path="settings" element={<SetupPage />} />
-              
+
               {/* Fallback for dashboard routes */}
               <Route path="*" element={<Navigate to="/dashboard" />} />
             </Route>
