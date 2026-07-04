@@ -46,8 +46,6 @@ function Placeholder({ title }: { title: string }) {
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading, isSetupComplete, isInviteFlow } = useAuth();
 
-  console.log('ProtectedRoute check:', { user, loading, isSetupComplete, isInviteFlow, pathname: window.location.pathname });
-
   if (loading) return (
     <div className="loading-screen">
       <div className="spinner" />
@@ -59,7 +57,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   // If user exists but school isn't setup, send to setup (unless they are on setup or in invite flow)
   if (!isSetupComplete && window.location.pathname !== '/setup' && !isInviteFlow) {
-    console.log('Redirecting to setup - conditions met');
     return <Navigate to="/setup" />;
   }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ShieldCheck, Lock } from 'lucide-react';
 import nexagenImage from '../../assets/nexagen.png';
@@ -7,72 +7,30 @@ import toast from 'react-hot-toast';
 
 export default function InviteAcceptPage() {
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [validInvite, setValidInvite] = useState(false);
     const [email, setEmail] = useState('');
 
     useEffect(() => {
-        console.log('InviteAcceptPage mounted, pathname:', window.location.pathname);
-        
-        // Check if this is accessed from a valid invitation flow
-        const checkInviteValidity = async () => {
-            // Check URL hash for tokens (Supabase passes them here)
-            const hash = window.location.hash;
-            console.log('URL hash:', hash);
-            
-            // If there's a hash with tokens, let Supabase handle it automatically
-            if (hash && (hash.includes('access_token') || hash.includes('type=invite'))) {
-                console.log('Found tokens in hash, waiting for Supabase to process...');
-                // Supabase will automatically process the hash and set the session
-                // We'll wait for the onAuthStateChange event
-                return;
-            }
-
-            // Check if there's an active session (Supabase auto-auths from email link)
+        // Get email from session if available
+        const getSession = async () => {
             const { data: { session } } = await supabase.auth.getSession();
-            console.log('Current session:', session);
-
-            // If no session and no hash tokens, redirect to login
-            if (!session) {
-                console.log('No session found, redirecting to login');
-                toast.error("Invalid invitation link. Please use the link from your email.");
-                navigate('/auth/login');
-                return;
-            }
-
-            // Session exists - this is a valid invite flow
-            if (session.user?.email) {
+            if (session?.user?.email) {
                 setEmail(session.user.email);
             }
-            setValidInvite(true);
-            console.log('Setting validInvite to true');
         };
+        getSession();
 
-        checkInviteValidity();
-
+        // Listen for auth state changes (Supabase auto-processes tokens from email link)
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log('Auth state changed:', event, session);
-            
-            if (event === 'SIGNED_IN' && session) {
-                console.log('User signed in, setting validInvite to true');
-                if (session.user?.email) {
-                    setEmail(session.user.email);
-                }
-                setValidInvite(true);
-            } else if (event === 'PASSWORD_RECOVERY' && session) {
-                console.log('Password recovery, setting validInvite to true');
-                if (session.user?.email) {
-                    setEmail(session.user.email);
-                }
-                setValidInvite(true);
+            if (session?.user?.email) {
+                setEmail(session.user.email);
             }
         });
 
         return () => subscription.unsubscribe();
-    }, [navigate, searchParams]);
+    }, [navigate]);
 
     const handleCreateAccount = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -91,6 +49,7 @@ export default function InviteAcceptPage() {
             if (!user) {
                 toast.error("Session expired. Please use the invitation link again.");
                 navigate('/auth/login');
+                setLoading(false);
                 return;
             }
 
@@ -117,14 +76,9 @@ export default function InviteAcceptPage() {
             navigate('/auth/login');
         } catch (error: any) {
             toast.error(error.message || "Failed to create account. Please try again.");
+            setLoading(false);
         }
-        
-        setLoading(false);
     };
-
-    if (!validInvite) {
-        return <div className="flex justify-center p-8"><span className="spinner" /></div>;
-    }
 
     return (
         <div className="auth-page">
