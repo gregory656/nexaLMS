@@ -102,7 +102,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
+        // Check if we're on the invite/create-account page
+        const isOnCreateAccountPage = window.location.pathname === '/auth/create-account';
+
         const init = async () => {
+            // If on create-account page, don't interfere with the invite flow.
+            // Just stop loading and let InviteAcceptPage handle everything.
+            if (isOnCreateAccountPage) {
+                setState(prev => ({ ...prev, loading: false, isInviteFlow: true }));
+                return;
+            }
+
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
                 const { user, school } = await fetchUserWithSchool(session.user.id);
@@ -112,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     session,
                     loading: false,
                     isSetupComplete: school?.is_setup_complete ?? false,
-                    isInviteFlow: window.location.pathname === '/auth/create-account',
+                    isInviteFlow: false,
                 });
             } else {
                 setState(prev => ({ ...prev, loading: false }));
@@ -122,6 +132,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, session) => {
+                // Skip auth state processing on the create-account page to
+                // prevent the AuthContext from racing with InviteAcceptPage
+                if (isOnCreateAccountPage) return;
+
                 if (event === 'SIGNED_IN' && session?.user) {
                     const { user, school } = await fetchUserWithSchool(session.user.id);
                     setState({
@@ -130,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         session,
                         loading: false,
                         isSetupComplete: school?.is_setup_complete ?? false,
-                        isInviteFlow: window.location.pathname === '/auth/create-account',
+                        isInviteFlow: false,
                     });
                 } else if (event === 'SIGNED_OUT') {
                     setState({
