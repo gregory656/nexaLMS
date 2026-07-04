@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { ShieldCheck, Lock } from 'lucide-react';
 import nexagenImage from '../../assets/nexagen.png';
@@ -7,32 +7,78 @@ import toast from 'react-hot-toast';
 
 export default function InviteAcceptPage() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [validInvite, setValidInvite] = useState(false);
+    const [email, setEmail] = useState('');
 
     useEffect(() => {
-        // Supabase passes type=invite in the hash or handles it via INITIAL_SESSION/PASSWORD_RECOVERY
-        const checkSession = async () => {
+        // Check if this is accessed from a valid invitation flow
+        const checkInviteValidity = async () => {
+            // Check for invitation-specific parameters
+            const accessToken = searchParams.get('access_token');
+            const refreshToken = searchParams.get('refresh_token');
+            const type = searchParams.get('type');
+
+            // If no invitation tokens present, redirect to login
+            if (!accessToken && !refreshToken) {
+                toast.error("Invalid invitation link. Please use the link from your email.");
+                navigate('/auth/login');
+                return;
+            }
+
+            // Set the session from URL parameters if present
+            if (accessToken && refreshToken) {
+                const { data, error } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                });
+
+                if (error) {
+                    toast.error("Invalid or expired invitation link.");
+                    navigate('/auth/login');
+                    return;
+                }
+
+                if (data.session?.user?.email) {
+                    setEmail(data.session.user.email);
+                }
+            }
+
+            // Check current session
             const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                setValidInvite(true);
-            } else {
+            
+            if (!session) {
                 toast.error("Invalid or expired invitation link.");
                 navigate('/auth/login');
+                return;
             }
+
+            // Check if user already has a password set (account already created)
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                // Try to check if user already has password by attempting to get user metadata
+                // If user was just created via invite, they won't have a password yet
+                setEmail(user.email || '');
+            }
+
+            setValidInvite(true);
         };
-        checkSession();
+
+        checkInviteValidity();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
-                setValidInvite(true);
+            if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+                if (session?.user?.email) {
+                    setEmail(session.user.email);
+                }
             }
         });
 
         return () => subscription.unsubscribe();
-    }, [navigate]);
+    }, [navigate, searchParams]);
 
     const handleCreateAccount = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -44,13 +90,41 @@ export default function InviteAcceptPage() {
         }
 
         setLoading(true);
-        const { error } = await supabase.auth.updateUser({ password });
-        if (error) {
-            toast.error(error.message);
-        } else {
-            toast.success("Account created successfully. Welcome!");
-            navigate('/dashboard');
+        
+        try {
+            // Check if user already has a password set (prevents duplicate account creation)
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                toast.error("Session expired. Please use the invitation link again.");
+                navigate('/auth/login');
+                return;
+            }
+
+            // Update user password
+            const { error } = await supabase.auth.updateUser({ password });
+            
+            if (error) {
+                // Check if error indicates user already has a password
+                if (error.message.includes('password') || error.message.includes('already')) {
+                    toast.error("Account has already been created. Please sign in with your password.");
+                } else {
+                    toast.error(error.message);
+                }
+                setLoading(false);
+                return;
+            }
+
+            // Success - sign out user so they can sign in with their new credentials
+            await supabase.auth.signOut();
+            
+            toast.success("Account created successfully! Please sign in with your new password.");
+            
+            // Redirect to sign-in page
+            navigate('/auth/login');
+        } catch (error: any) {
+            toast.error(error.message || "Failed to create account. Please try again.");
         }
+        
         setLoading(false);
     };
 
@@ -69,9 +143,9 @@ export default function InviteAcceptPage() {
                     <div className="auth-logo-icon">N</div>
                     <span className="auth-logo-text">NexaLMS</span>
                 </div>
-                <h2 className="auth-title">Complete your Account</h2>
+                <h2 className="auth-title">Create Your Account</h2>
                 <p className="auth-subtitle">
-                    Welcome! Set a secure password to activate your admin account.
+                    {email ? `You're invited to join as ${email}. Set your password to activate your account.` : 'Set a secure password to activate your account.'}
                 </p>
 
                 <form onSubmit={handleCreateAccount} className="mt-4">
@@ -108,7 +182,7 @@ export default function InviteAcceptPage() {
                     </div>
 
                     <button type="submit" className="btn btn-primary btn-lg btn-full mt-4" disabled={loading}>
-                        {loading ? <span className="spinner" /> : 'Activate Account'}
+                        {loading ? <span className="spinner" /> : 'Create Account'}
                     </button>
 
                     <p className="text-sm text-center text-muted mt-4">
