@@ -24,6 +24,10 @@ import TimetablePage from './pages/academics/TimetablePage';
 import AlumniPage from './pages/alumni/AlumniPage';
 import RolesPage from './pages/roles/RolesPage';
 import SubscriptionPage from './pages/subscription/SubscriptionPage';
+import ExamsPage from './pages/exams/ExamsPage';
+import ReportCardsPage from './pages/reports/ReportCardsPage';
+import AttendancePage from './pages/attendance/AttendancePage';
+import FinancePage from './pages/finance/FinancePage';
 
 // Simple placeholder pages for sections being built
 function Placeholder({ title }: { title: string }) {
@@ -97,10 +101,13 @@ export default function App() {
               <Route path="academics/departments" element={<DepartmentsPage />} />
               <Route path="academics/timetable" element={<TimetablePage />} />
 
-              {/* Assessment */}
-              <Route path="exams" element={<Placeholder title="Examinations" />} />
-              <Route path="reports" element={<Placeholder title="Report Cards" />} />
-              <Route path="attendance" element={<Placeholder title="Attendance" />} />
+              {/* Assessment — each is a full page with internal tabs */}
+              <Route path="exams" element={<ExamsPage />} />
+              <Route path="reports" element={<ReportCardsPage />} />
+              <Route path="attendance" element={<AttendancePage />} />
+
+              {/* Finance */}
+              <Route path="finance" element={<FinancePage />} />
 
               {/* Administration */}
               <Route path="roles" element={<RolesPage />} />

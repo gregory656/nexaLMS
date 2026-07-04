@@ -63,7 +63,6 @@ const navSections = [
 export default function Sidebar() {
     const { user, school, signOut } = useAuth();
     const navigate = useNavigate();
-
     const handleLogout = async () => {
         await signOut();
         navigate('/auth/login');
