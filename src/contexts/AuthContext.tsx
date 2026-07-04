@@ -67,8 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // This allows the user to proceed to create-account page
         if (error || !data) {
             console.log('User not found in database, likely in invite flow');
-            // Return a minimal user object to prevent redirects
-            return { user: { id: userId } as any, school: null };
+            return { user: null, school: null };
         }
 
         const user = await fetchUser(userId);

@@ -123,10 +123,10 @@ export default function App() {
               <Route path="subscription" element={<SubscriptionPage />} />
               <Route path="announcements" element={<Placeholder title="Announcements" />} />
               <Route path="settings" element={<SetupPage />} />
+              
+              {/* Fallback for dashboard routes */}
+              <Route path="*" element={<Navigate to="/dashboard" />} />
             </Route>
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/dashboard" />} />
           </Routes>
         </BrowserRouter>
       </SchoolProvider>
