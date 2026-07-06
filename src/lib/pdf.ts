@@ -164,12 +164,13 @@ export function addTableToPdf(doc: jsPDF, headers: string[], rows: any[][], star
 export function downloadPdf(doc: jsPDF, fileName: string) {
     const pdfBlob = doc.output('blob');
     const url = URL.createObjectURL(pdfBlob);
-    const win = window.open(url, '_blank');
-    if (!win) {
-        URL.revokeObjectURL(url);
-        throw new Error('Pop-up blocked. Allow pop-ups to download the PDF.');
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileName}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // CSV export helper
