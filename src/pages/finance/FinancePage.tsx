@@ -6,6 +6,7 @@ import {
     LayoutDashboard, DollarSign, CreditCard, BarChart3,
     Plus, X, Download, Search
 } from 'lucide-react';
+import { addTableToPdf, createPdfWithHeader, downloadCsv, downloadPdf } from '../../lib/pdf';
 
 const TABS = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -83,6 +84,8 @@ export default function FinancePage() {
     const totalCollected = ledgerEntries.filter(e => e.transaction_type === 'payment').reduce((sum, p) => sum + Number(p.amount || 0), 0);
     const totalOutstanding = students.reduce((sum, s) => sum + Number(s.fee_balance || 0), 0);
     const totalCharged = ledgerEntries.filter(e => e.transaction_type === 'charge').reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const collectionRate = totalCharged > 0 ? Math.round((totalCollected / totalCharged) * 100) : 0;
+    const defaulters = students.filter(student => Number(student.fee_balance || 0) > 0);
 
     const filterStudents = (query: string) => {
         const normalized = query.trim().toLowerCase();
@@ -238,6 +241,94 @@ export default function FinancePage() {
         setSaving(false);
     };
 
+    const formatCurrency = (value: number) => `KES ${Number(value || 0).toLocaleString()}`;
+
+    const getFeeCategoryTotals = () => {
+        const categoryTotals: Record<string, number> = {};
+        feeStructures.forEach(fee => {
+            const category = fee.fee_categories?.name || 'Uncategorized';
+            categoryTotals[category] = (categoryTotals[category] || 0) + Number(fee.amount || 0);
+        });
+        return Object.entries(categoryTotals)
+            .map(([name, amount]) => ({ name, amount }))
+            .sort((a, b) => b.amount - a.amount);
+    };
+
+    const getPaymentMethodTotals = () => {
+        const methodTotals: Record<string, number> = {};
+        ledgerEntries
+            .filter(entry => entry.transaction_type === 'payment')
+            .forEach(entry => {
+                const method = entry.payment_method || 'Unspecified';
+                methodTotals[method] = (methodTotals[method] || 0) + Number(entry.amount || 0);
+            });
+        return Object.entries(methodTotals)
+            .map(([name, amount]) => ({ name, amount }))
+            .sort((a, b) => b.amount - a.amount);
+    };
+
+    const getBalanceBuckets = () => {
+        const paid = students.filter(student => Number(student.fee_balance || 0) <= 0).length;
+        const low = students.filter(student => Number(student.fee_balance || 0) > 0 && Number(student.fee_balance || 0) <= 5000).length;
+        const medium = students.filter(student => Number(student.fee_balance || 0) > 5000 && Number(student.fee_balance || 0) <= 20000).length;
+        const high = students.filter(student => Number(student.fee_balance || 0) > 20000).length;
+        return [
+            { name: 'Cleared', value: paid, color: '#10b981' },
+            { name: '1-5k', value: low, color: '#38bdf8' },
+            { name: '5k-20k', value: medium, color: '#f59e0b' },
+            { name: '20k+', value: high, color: '#ef4444' },
+        ];
+    };
+
+    const handleDownloadFinanceReport = async (format: 'csv' | 'pdf') => {
+        const balanceRows = students
+            .slice()
+            .sort((a, b) => Number(b.fee_balance || 0) - Number(a.fee_balance || 0))
+            .map((student, index) => [
+                String(index + 1),
+                `${student.first_name || ''} ${student.last_name || ''}`.trim(),
+                student.admission_number || '',
+                student.classes?.name || '',
+                formatCurrency(Number(student.fee_balance || 0)),
+            ]);
+
+        const summaryRows = [
+            ['Total Charged', formatCurrency(totalCharged)],
+            ['Total Collected', formatCurrency(totalCollected)],
+            ['Outstanding Balance', formatCurrency(totalOutstanding)],
+            ['Collection Rate', `${collectionRate}%`],
+            ['Students With Balances', String(defaulters.length)],
+        ];
+
+        if (format === 'csv') {
+            downloadCsv(
+                ['Metric', 'Value'],
+                summaryRows,
+                `finance_summary_${Date.now()}`
+            );
+            downloadCsv(
+                ['#', 'Student', 'Adm No.', 'Class', 'Balance'],
+                balanceRows,
+                `student_fee_balances_${Date.now()}`
+            );
+            toast.success('Finance CSV reports downloaded');
+            return;
+        }
+
+        const doc = await createPdfWithHeader({
+            title: 'Finance Report',
+            subtitle: `Collection rate: ${collectionRate}% | Defaulters: ${defaulters.length}`,
+            schoolName: school?.name || 'School',
+            schoolMotto: school?.motto,
+            logoUrl: school?.logo_url,
+            watermarkUrl: school?.watermark_url,
+        });
+        addTableToPdf(doc, ['Metric', 'Value'], summaryRows);
+        addTableToPdf(doc, ['#', 'Student', 'Adm No.', 'Class', 'Balance'], balanceRows.slice(0, 80), (doc as any).lastAutoTable.finalY + 10);
+        downloadPdf(doc, `finance_report_${Date.now()}`);
+        toast.success('Finance PDF report downloaded');
+    };
+
     const renderDashboard = () => (
         <>
             <div className="grid-3 mb-6">
@@ -343,15 +434,154 @@ export default function FinancePage() {
         </div>
     );
 
-    const renderReports = () => (
-        <div className="card">
-            <div className="empty-state">
-                <Download size={48} style={{ color: 'var(--gray-300)', marginBottom: '1rem' }} />
-                <h3>Finance Reports</h3>
-                <p>Download fee balance reports, defaulter lists, receipts, and statements. Coming soon.</p>
-            </div>
-        </div>
-    );
+    const renderReports = () => {
+        const categoryTotals = getFeeCategoryTotals();
+        const paymentMethodTotals = getPaymentMethodTotals();
+        const balanceBuckets = getBalanceBuckets();
+        const topBalances = defaulters
+            .slice()
+            .sort((a, b) => Number(b.fee_balance || 0) - Number(a.fee_balance || 0))
+            .slice(0, 8);
+        const maxCategory = Math.max(...categoryTotals.map(item => item.amount), 1);
+        const maxBalance = Math.max(...topBalances.map(student => Number(student.fee_balance || 0)), 1);
+        const pieTotal = Math.max(balanceBuckets.reduce((sum, item) => sum + item.value, 0), 1);
+        let pieCursor = 0;
+        const pieGradient = balanceBuckets.map(item => {
+            const start = pieCursor;
+            pieCursor += (item.value / pieTotal) * 100;
+            return `${item.color} ${start}% ${pieCursor}%`;
+        }).join(', ');
+
+        return (
+            <>
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h3 className="text-lg font-bold">Finance Reports</h3>
+                        <p className="text-sm text-muted">Collections, balances, fee mix, and payment trends.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleDownloadFinanceReport('csv')}>
+                            <Download size={16} /> CSV
+                        </button>
+                        <button className="btn btn-download btn-sm" onClick={() => handleDownloadFinanceReport('pdf')}>
+                            <Download size={16} /> PDF
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid-4 mb-6">
+                    <div className="stat-card" style={{ borderTop: '4px solid #10b981' }}><div className="stat-info"><h3>Collected</h3><div className="stat-value">{formatCurrency(totalCollected)}</div></div></div>
+                    <div className="stat-card" style={{ borderTop: '4px solid #f97316' }}><div className="stat-info"><h3>Outstanding</h3><div className="stat-value">{formatCurrency(totalOutstanding)}</div></div></div>
+                    <div className="stat-card" style={{ borderTop: '4px solid #6366f1' }}><div className="stat-info"><h3>Collection Rate</h3><div className="stat-value">{collectionRate}%</div></div></div>
+                    <div className="stat-card" style={{ borderTop: '4px solid #ec4899' }}><div className="stat-info"><h3>With Balances</h3><div className="stat-value">{defaulters.length}</div></div></div>
+                </div>
+
+                <div className="grid-2 mb-6">
+                    <div className="card">
+                        <div className="card-header"><h3 className="card-title">Collection Health</h3></div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '1.25rem', alignItems: 'center' }}>
+                            <div style={{
+                                width: 150,
+                                height: 150,
+                                borderRadius: '50%',
+                                background: `conic-gradient(#10b981 0 ${collectionRate}%, #f97316 ${collectionRate}% 100%)`,
+                                display: 'grid',
+                                placeItems: 'center',
+                                boxShadow: '0 14px 32px rgba(16, 185, 129, 0.22)'
+                            }}>
+                                <div style={{ width: 92, height: 92, borderRadius: '50%', background: 'white', display: 'grid', placeItems: 'center', fontWeight: 800, color: 'var(--gray-900)', fontSize: '1.5rem' }}>{collectionRate}%</div>
+                            </div>
+                            <div>
+                                <div className="mb-3"><strong>{formatCurrency(totalCollected)}</strong><div className="text-sm text-muted">Collected from recorded payments</div></div>
+                                <div><strong>{formatCurrency(Math.max(totalCharged - totalCollected, 0))}</strong><div className="text-sm text-muted">Remaining against recorded charges</div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <div className="card-header"><h3 className="card-title">Balance Segments</h3></div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '1.25rem', alignItems: 'center' }}>
+                            <div style={{
+                                width: 150,
+                                height: 150,
+                                borderRadius: '50%',
+                                background: `conic-gradient(${pieGradient || '#e5e7eb 0% 100%'})`,
+                                boxShadow: '0 14px 32px rgba(99, 102, 241, 0.18)'
+                            }} />
+                            <div className="grid" style={{ gap: '0.65rem' }}>
+                                {balanceBuckets.map(item => (
+                                    <div key={item.name} className="flex justify-between items-center">
+                                        <span className="flex items-center gap-2"><span style={{ width: 12, height: 12, borderRadius: 999, background: item.color }} /> {item.name}</span>
+                                        <strong>{item.value}</strong>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="grid-2 mb-6">
+                    <div className="card">
+                        <div className="card-header"><h3 className="card-title">Fee Category Mix</h3></div>
+                        {categoryTotals.length === 0 ? (
+                            <div className="empty-state"><h3>No fee structures yet</h3></div>
+                        ) : (
+                            <div className="grid" style={{ gap: '0.9rem' }}>
+                                {categoryTotals.slice(0, 8).map((item, index) => (
+                                    <div key={item.name}>
+                                        <div className="flex justify-between text-sm mb-1"><strong>{item.name}</strong><span>{formatCurrency(item.amount)}</span></div>
+                                        <div style={{ height: 12, borderRadius: 999, background: 'var(--gray-100)', overflow: 'hidden' }}>
+                                            <div style={{ width: `${Math.max((item.amount / maxCategory) * 100, 6)}%`, height: '100%', borderRadius: 999, background: ['#10b981', '#3b82f6', '#f97316', '#ec4899', '#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444'][index % 8] }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="card">
+                        <div className="card-header"><h3 className="card-title">Largest Balances</h3></div>
+                        {topBalances.length === 0 ? (
+                            <div className="empty-state"><h3>No outstanding balances</h3></div>
+                        ) : (
+                            <div className="grid" style={{ gap: '0.85rem' }}>
+                                {topBalances.map((student, index) => (
+                                    <div key={student.id}>
+                                        <div className="flex justify-between text-sm mb-1"><strong>{student.first_name} {student.last_name}</strong><span>{formatCurrency(Number(student.fee_balance || 0))}</span></div>
+                                        <div style={{ height: 10, borderRadius: 999, background: 'var(--gray-100)', overflow: 'hidden' }}>
+                                            <div style={{ width: `${Math.max((Number(student.fee_balance || 0) / maxBalance) * 100, 6)}%`, height: '100%', borderRadius: 999, background: ['#ef4444', '#f97316', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981'][index % 8] }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header"><h3 className="card-title">Payment Channels</h3></div>
+                    {paymentMethodTotals.length === 0 ? (
+                        <div className="empty-state"><h3>No payments recorded yet</h3></div>
+                    ) : (
+                        <div className="table-wrapper">
+                            <table className="data-table">
+                                <thead><tr><th>Method</th><th>Total Collected</th><th>Share</th></tr></thead>
+                                <tbody>
+                                    {paymentMethodTotals.map(item => (
+                                        <tr key={item.name}>
+                                            <td><strong>{item.name}</strong></td>
+                                            <td>{formatCurrency(item.amount)}</td>
+                                            <td><span className="badge badge-blue">{totalCollected > 0 ? Math.round((item.amount / totalCollected) * 100) : 0}%</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            </>
+        );
+    };
 
     return (
         <>

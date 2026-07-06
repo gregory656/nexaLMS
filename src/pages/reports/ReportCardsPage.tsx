@@ -3,10 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { generateReportCardPdf, downloadPdf } from '../../lib/pdf';
-import jsPDF from 'jspdf';
 import {
     FileText, ClipboardList, Download, Eye, ToggleLeft, ToggleRight,
-    Printer, QrCode
 } from 'lucide-react';
 
 const TABS = [
@@ -31,7 +29,6 @@ export default function ReportCardsPage() {
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedStudent, setSelectedStudent] = useState('');
     const [includeFeeBalance, setIncludeFeeBalance] = useState(false);
-    const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
 
     const fetchAll = async () => {
@@ -114,78 +111,6 @@ export default function ReportCardsPage() {
     };
 
     // ─── BULK DOWNLOAD (class sorted by performance) ───
-    const handleBulkDownload = async () => {
-        if (!selectedExam || !selectedClass) {
-            toast.error('Select an exam and class first');
-            return;
-        }
-        if (rankedStudents.length === 0) {
-            toast.error('No students in this class');
-            return;
-        }
-        setDownloading(true);
-        try {
-            // Generate first student's report
-            const firstStudent = rankedStudents[0];
-            const firstReport = getStudentReport(firstStudent.id);
-            const mergedDoc = await generateReportCardPdf({
-                school,
-                student: firstStudent,
-                exam: exams.find(e => e.id === selectedExam),
-                className: classes.find(c => c.id === selectedClass)?.name || '',
-                subjects: firstReport.subjects,
-                total: firstReport.total,
-                mean: firstReport.mean,
-                grade: firstReport.grade,
-                remarks: firstReport.remarks,
-                feeBalance: firstStudent.fee_balance,
-                feeTimestamp: firstStudent.fee_balance_updated_at,
-                includeFeeBalance,
-                getGrade,
-                position: 1,
-                totalStudents: rankedStudents.length,
-            });
-
-            // Add remaining students as new pages
-            for (let i = 1; i < rankedStudents.length; i++) {
-                const student = rankedStudents[i];
-                const report = getStudentReport(student.id);
-                mergedDoc.addPage();
-
-                // Generate individual report on the new page
-                const tempDoc = await generateReportCardPdf({
-                    school,
-                    student,
-                    exam: exams.find(e => e.id === selectedExam),
-                    className: classes.find(c => c.id === selectedClass)?.name || '',
-                    subjects: report.subjects,
-                    total: report.total,
-                    mean: report.mean,
-                    grade: report.grade,
-                    remarks: report.remarks,
-                    feeBalance: student.fee_balance,
-                    feeTimestamp: student.fee_balance_updated_at,
-                    includeFeeBalance,
-                    getGrade,
-                    position: i + 1,
-                    totalStudents: rankedStudents.length,
-                });
-
-                // Copy content from temp doc to merged doc
-                // Since jsPDF doesn't support merging natively, we generate individual PDFs
-                // For bulk, we download separate files
-            }
-
-            // Download the merged document
-            const className = classes.find(c => c.id === selectedClass)?.name || 'class';
-            downloadPdf(mergedDoc, `report_cards_${className}_${Date.now()}`);
-            toast.success(`Downloaded ${rankedStudents.length} report cards (sorted by performance)`);
-        } catch (err: any) {
-            toast.error('Bulk download failed: ' + (err.message || ''));
-        }
-        setDownloading(false);
-    };
-
     // Individual downloads (one per student, zipped approach - download one by one)
     const handleBulkIndividual = async () => {
         if (!selectedExam || !selectedClass) {

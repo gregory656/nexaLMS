@@ -5,10 +5,8 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import {
     LayoutDashboard, Settings, FileText, BarChart3, Download,
-    Plus, X, Search, MoreVertical, Edit2, Trash2, Upload, Shuffle,
-    BookOpen, Filter, ChevronDown, Printer
+    Plus, X, Trash2, Shuffle, BookOpen
 } from 'lucide-react';
-import { createPdfWithHeader, addTableToPdf, downloadPdf } from '../../lib/pdf';
 
 const TABS = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -57,6 +55,14 @@ export default function ExamsPage() {
     const [showAutofill, setShowAutofill] = useState(false);
     const [autofillMin, setAutofillMin] = useState('60');
     const [autofillMax, setAutofillMax] = useState('90');
+
+    // Download centre state
+    const [dlScope, setDlScope] = useState<'school' | 'class' | 'individual' | 'subject'>('school');
+    const [dlExam, setDlExam] = useState('');
+    const [dlClass, setDlClass] = useState('');
+    const [dlSubject, setDlSubject] = useState('');
+    const [dlStudent, setDlStudent] = useState('');
+    const [analyticsDownloading, setAnalyticsDownloading] = useState(false);
 
     const fetchAll = async () => {
         if (!school?.id) return;
@@ -347,7 +353,7 @@ export default function ExamsPage() {
                         <div className="card">
                             <h4 className="font-semibold mb-4">Top 5 Performers</h4>
                             <div className="flex items-end gap-2 h-40 pt-4 border-b border-gray-100">
-                                {ranked.slice(0, 5).map((s, i) => {
+                                {ranked.slice(0, 5).map((s) => {
                                     const maxMean = ranked[0].mean || 1;
                                     const heightPercent = Math.max((s.mean / maxMean) * 100, 10);
                                     return (
@@ -405,135 +411,66 @@ export default function ExamsPage() {
         );
     };
 
-    const handleDownloadReportCards = async () => {
-        if (!selectedExam) return toast.error('Select an exam to generate report cards');
-        setSaving(true);
-        const examDetails = exams.find(e => e.id === selectedExam);
-        const examResults = results.filter(r => r.exam_id === selectedExam);
-
-        if (examResults.length === 0) {
-            toast.error('No results found for this exam');
-            setSaving(false);
+    const handleDownloadAnalytics = async () => {
+        if (!dlExam) {
+            toast.error('Select an exam');
             return;
         }
+        setAnalyticsDownloading(true);
+        try {
+            let query = supabase
+                .from('exam_results')
+                .select('*, students(first_name, last_name, admission_number, classes(name)), subjects(name), exams(name)')
+                .eq('school_id', school!.id)
+                .eq('exam_id', dlExam);
 
-        const studentMap: Record<string, { student: any, results: any[] }> = {};
-        examResults.forEach(r => {
-            if (!studentMap[r.student_id]) studentMap[r.student_id] = { student: r.students, results: [] };
-            studentMap[r.student_id].results.push(r);
-        });
+            if (dlScope === 'class' && dlClass) {
+                query = query.eq('students.class_id', dlClass);
+            } else if (dlScope === 'individual' && dlStudent) {
+                query = query.eq('student_id', dlStudent);
+            } else if (dlScope === 'subject' && dlSubject) {
+                query = query.eq('subject_id', dlSubject);
+            }
 
-        for (const [id, data] of Object.entries(studentMap)) {
-            const doc = await createPdfWithHeader({
-                title: `${examDetails?.name || 'Exam'} Report Card`,
-                subtitle: `Student: ${data.student?.first_name} ${data.student?.last_name}  |  Adm: ${data.student?.admission_number || 'N/A'}`,
-                schoolName: school?.name || 'School Name',
-                schoolMotto: school?.motto || '',
-                logoUrl: school?.logo_url || '',
-            });
+            const { data, error } = await query.limit(2000);
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                toast.error('No results found for this criteria');
+                setAnalyticsDownloading(false);
+                return;
+            }
 
-            const headers = ['Subject', 'Marks', 'Grade', 'Remarks'];
-            const rows = data.results.map(r => {
-                const mark = Number(r.marks || 0);
-                const g = getGrade(mark);
-                return [
-                    r.subjects?.name || 'Subject',
-                    String(mark),
-                    g?.grade || '-',
-                    g?.remarks ? g.remarks.replace('{student name}', data.student?.first_name).replace('{student_name}', data.student?.first_name) : '-'
-                ];
-            });
+            const rows = (data as any[]).map(r => ({
+                StudentName: `${r.students?.first_name} ${r.students?.last_name}`,
+                AdmissionNo: r.students?.admission_number || '',
+                Class: r.students?.classes?.name || '',
+                Subject: r.subjects?.name || '',
+                Exam: r.exams?.name || '',
+                Marks: r.marks || 0,
+                Grade: r.grade || ''
+            }));
 
-            addTableToPdf(doc, headers, rows);
-
-            // Add summary footer
-            const total = data.results.reduce((sum, r) => sum + Number(r.marks || 0), 0);
-            const mean = total / (data.results.length || 1);
-            const overallGrade = getGrade(mean);
-
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'bold');
-            doc.text(`Total Marks: ${total} / ${data.results.length * 100}`, 14, (doc as any).lastAutoTable.finalY + 15);
-            doc.text(`Mean Grade: ${overallGrade?.grade || '-'}`, 14, (doc as any).lastAutoTable.finalY + 22);
-            doc.text("Class Teacher's Signature: _____________________", 14, (doc as any).lastAutoTable.finalY + 35);
-            doc.text("Principal's Signature: _________________________", 14, (doc as any).lastAutoTable.finalY + 45);
-
-            downloadPdf(doc, `ReportCard_${data.student?.first_name}_${data.student?.last_name}`);
-
-            // Just generate 1 for demo purposes if there are many, or wait between them
-            // In a real app we might put them all in 1 PDF or zip them, for now, downloading the first 5 MAX to prevent browser crash
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Analytics");
+            const csv = XLSX.utils.sheet_to_csv(ws);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `exam_analytics_${dlScope}_${Date.now()}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            toast.success('Analytics downloaded');
+        } catch (err: any) {
+            toast.error('Download failed: ' + err.message);
         }
-        toast.success('Report cards downloaded');
-        setSaving(false);
+        setAnalyticsDownloading(false);
     };
 
     const renderDownload = () => {
-        const [dlScope, setDlScope] = useState<'school' | 'class' | 'individual' | 'subject'>('school');
-        const [dlExam, setDlExam] = useState('');
-        const [dlClass, setDlClass] = useState('');
-        const [dlSubject, setDlSubject] = useState('');
-        const [dlStudent, setDlStudent] = useState('');
-        const [downloading, setDownloading] = useState(false);
-
-        const handleDownloadAnalytics = async () => {
-            if (!dlExam) {
-                toast.error('Select an exam');
-                return;
-            }
-            setDownloading(true);
-            try {
-                let query = supabase
-                    .from('exam_results')
-                    .select('*, students(first_name, last_name, admission_number, classes(name)), subjects(name), exams(name)')
-                    .eq('school_id', school!.id)
-                    .eq('exam_id', dlExam);
-
-                if (dlScope === 'class' && dlClass) {
-                    query = query.eq('students.class_id', dlClass);
-                } else if (dlScope === 'individual' && dlStudent) {
-                    query = query.eq('student_id', dlStudent);
-                } else if (dlScope === 'subject' && dlSubject) {
-                    query = query.eq('subject_id', dlSubject);
-                }
-
-                const { data, error } = await query.limit(2000);
-                if (error) throw error;
-                if (!data || data.length === 0) {
-                    toast.error('No results found for this criteria');
-                    setDownloading(false);
-                    return;
-                }
-
-                const rows = (data as any[]).map(r => ({
-                    StudentName: `${r.students?.first_name} ${r.students?.last_name}`,
-                    AdmissionNo: r.students?.admission_number || '',
-                    Class: r.students?.classes?.name || '',
-                    Subject: r.subjects?.name || '',
-                    Exam: r.exams?.name || '',
-                    Marks: r.marks || 0,
-                    Grade: r.grade || ''
-                }));
-
-                const ws = XLSX.utils.json_to_sheet(rows);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Analytics");
-                const csv = XLSX.utils.sheet_to_csv(ws);
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `exam_analytics_${dlScope}_${Date.now()}.csv`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                toast.success('Analytics downloaded');
-            } catch (err: any) {
-                toast.error('Download failed: ' + err.message);
-            }
-            setDownloading(false);
-        };
-
         return (
             <div className="card">
                 <h3 className="card-title mb-4">Examination Analytics Download</h3>
@@ -582,8 +519,8 @@ export default function ExamsPage() {
                         </div>
                     )}
                 </div>
-                <button className="btn btn-primary" onClick={handleDownloadAnalytics} disabled={!dlExam || downloading}>
-                    {downloading ? <span className="spinner" /> : <><Download size={18} /> Download Analytics (CSV)</>}
+                <button className="btn btn-primary" onClick={handleDownloadAnalytics} disabled={!dlExam || analyticsDownloading}>
+                    {analyticsDownloading ? <span className="spinner" /> : <><Download size={18} /> Download Analytics (CSV)</>}
                 </button>
             </div>
         );

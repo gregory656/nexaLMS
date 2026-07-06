@@ -7,6 +7,7 @@ import {
     Download, Calendar, Check
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { addTableToPdf, createPdfWithHeader, downloadPdf } from '../../lib/pdf';
 
 const TABS = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -54,6 +55,7 @@ export default function AttendancePage() {
 
     // Reports download state
     const [downloadScope, setDownloadScope] = useState<'students' | 'teachers'>('students');
+    const [downloadFormat, setDownloadFormat] = useState<'csv' | 'pdf'>('csv');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [downloading, setDownloading] = useState(false);
@@ -380,8 +382,30 @@ export default function AttendancePage() {
                     Status: record.status
                 }));
 
-                downloadRowsAsCsv(rows, "Attendance", `student_attendance_${startDate}_to_${endDate}.csv`);
-                toast.success('Student attendance exported');
+                if (downloadFormat === 'pdf') {
+                    const doc = await createPdfWithHeader({
+                        title: 'Student Attendance Report',
+                        subtitle: `${startDate} to ${endDate} | Total records: ${rows.length}`,
+                        schoolName: school?.name || 'School',
+                        schoolMotto: school?.motto,
+                        logoUrl: school?.logo_url,
+                        watermarkUrl: school?.watermark_url,
+                        orientation: 'landscape',
+                    });
+                    addTableToPdf(doc, ['Student', 'Adm No.', 'Class', 'Date', 'Session', 'Status'], rows.map(row => [
+                        row.StudentName,
+                        row.AdmissionNo,
+                        row.Class,
+                        row.Date,
+                        row.Session,
+                        row.Status,
+                    ]));
+                    downloadPdf(doc, `student_attendance_${startDate}_to_${endDate}`);
+                    toast.success('Student attendance PDF exported');
+                } else {
+                    downloadRowsAsCsv(rows, "Attendance", `student_attendance_${startDate}_to_${endDate}.csv`);
+                    toast.success('Student attendance CSV exported');
+                }
             } else {
                 const { data: sessionData, error: sessionError } = await supabase
                     .from('teacher_attendance_sessions')
@@ -423,8 +447,28 @@ export default function AttendancePage() {
                     Status: record.status
                 }));
 
-                downloadRowsAsCsv(rows, "Teacher Attendance", `teacher_attendance_${startDate}_to_${endDate}.csv`);
-                toast.success('Teacher attendance exported');
+                if (downloadFormat === 'pdf') {
+                    const doc = await createPdfWithHeader({
+                        title: 'Teacher Attendance Report',
+                        subtitle: `${startDate} to ${endDate} | Total records: ${rows.length}`,
+                        schoolName: school?.name || 'School',
+                        schoolMotto: school?.motto,
+                        logoUrl: school?.logo_url,
+                        watermarkUrl: school?.watermark_url,
+                        orientation: 'landscape',
+                    });
+                    addTableToPdf(doc, ['Teacher', 'Date', 'Session', 'Status'], rows.map(row => [
+                        row.TeacherName,
+                        row.Date,
+                        row.Session,
+                        row.Status,
+                    ]));
+                    downloadPdf(doc, `teacher_attendance_${startDate}_to_${endDate}`);
+                    toast.success('Teacher attendance PDF exported');
+                } else {
+                    downloadRowsAsCsv(rows, "Teacher Attendance", `teacher_attendance_${startDate}_to_${endDate}.csv`);
+                    toast.success('Teacher attendance CSV exported');
+                }
             }
         } catch (err: any) {
             toast.error('Export failed: ' + err.message);
@@ -445,12 +489,19 @@ export default function AttendancePage() {
 
                 <div className="card bg-gray-50 border-0 p-4 rounded mb-4">
                     <h4 className="font-semibold mb-3">Advanced Download with Date Range</h4>
-                    <div className="grid-3 gap-2 mb-3">
+                    <div className="grid-4 gap-2 mb-3">
                         <div className="form-group">
                             <label className="form-label">Scope</label>
                             <select className="form-select" value={downloadScope} onChange={e => setDownloadScope(e.target.value as any)}>
                                 <option value="students">Student Attendance</option>
                                 <option value="teachers">Teacher Attendance</option>
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Format</label>
+                            <select className="form-select" value={downloadFormat} onChange={e => setDownloadFormat(e.target.value as any)}>
+                                <option value="csv">CSV spreadsheet</option>
+                                <option value="pdf">PDF table</option>
                             </select>
                         </div>
                         <div className="form-group">
@@ -463,7 +514,7 @@ export default function AttendancePage() {
                         </div>
                     </div>
                     <button className="btn btn-primary btn-sm" onClick={handleAdvancedDownload} disabled={downloading}>
-                        {downloading ? <span className="spinner" /> : <><Download size={16} /> Download Range</>}
+                        {downloading ? <span className="spinner" /> : <><Download size={16} /> Download {downloadFormat.toUpperCase()}</>}
                     </button>
                 </div>
 
