@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { isValidKenyanPhone, normalizeKenyanPhone } from '../../lib/phone';
-import { Plus, Search, Filter, MoreVertical, Edit2, Trash2, X, Download } from 'lucide-react';
+import { uploadToCloudinary } from '../../lib/cloudinary';
+import { createPdfWithHeader, addTableToPdf, downloadPdf, downloadCsv } from '../../lib/pdf';
+import { Plus, Search, Filter, MoreVertical, Edit2, Trash2, X, Download, Upload, Camera } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export default function StudentsPage() {
     const { school } = useAuth();
@@ -12,6 +15,7 @@ export default function StudentsPage() {
     const [houses, setHouses] = useState<any[]>([]);
     const [subjects, setSubjects] = useState<any[]>([]);
     const [guardians, setGuardians] = useState<any[]>([]);
+    const [gradeLevels, setGradeLevels] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingStudent, setEditingStudent] = useState<any>(null);
@@ -19,6 +23,27 @@ export default function StudentsPage() {
     const [filterClass, setFilterClass] = useState('');
     const [filterGender, setFilterGender] = useState('');
     const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+    // Import state
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importData, setImportData] = useState<any[]>([]);
+    const [importColumns, setImportColumns] = useState<string[]>([]);
+    const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+    const [importing, setImporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Download state
+    const [showDownloadModal, setShowDownloadModal] = useState(false);
+    const [dlScope, setDlScope] = useState('all');
+    const [dlGradeLevel, setDlGradeLevel] = useState('');
+    const [dlClass, setDlClass] = useState('');
+    const [dlGender, setDlGender] = useState('');
+    const [dlFormat, setDlFormat] = useState('pdf');
+
+    // Profile pic
+    const [profilePicFile, setProfilePicFile] = useState<File | null>(null);
+    const [profilePicPreview, setProfilePicPreview] = useState('');
+    const profilePicRef = useRef<HTMLInputElement>(null);
 
     const blankForm = {
         first_name: '', last_name: '', other_names: '', gender: '',
@@ -33,19 +58,21 @@ export default function StudentsPage() {
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const [stuRes, clsRes, housRes, subjRes, guardRes] = await Promise.all([
+        const [stuRes, clsRes, housRes, subjRes, guardRes, glRes] = await Promise.all([
             supabase.from('students').select('*, classes(name), houses(name), guardians(first_name, last_name)').eq('school_id', school.id).order('created_at', { ascending: false }),
             supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
             supabase.from('houses').select('*').eq('school_id', school.id).order('name'),
             supabase.from('subjects').select('*').eq('school_id', school.id).order('name'),
             supabase.from('guardians').select('*').eq('school_id', school.id).order('first_name'),
+            supabase.from('grade_levels').select('*').eq('school_id', school.id).order('level_order'),
         ]);
-        [stuRes.error, clsRes.error, housRes.error, subjRes.error, guardRes.error].filter(Boolean).forEach(error => toast.error(error!.message));
+        [stuRes.error, clsRes.error, housRes.error, subjRes.error, guardRes.error, glRes.error].filter(Boolean).forEach(error => toast.error(error!.message));
         setStudents(stuRes.data || []);
         setClasses(clsRes.data || []);
         setHouses(housRes.data || []);
         setSubjects(subjRes.data || []);
         setGuardians(guardRes.data || []);
+        setGradeLevels(glRes.data || []);
         setLoading(false);
     };
 
@@ -55,6 +82,17 @@ export default function StudentsPage() {
 
     const canAddStudents = classes.length > 0 && houses.length > 0 && subjects.length > 0;
 
+    // ─── PROFILE PIC HANDLING ───
+    const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+        if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+        setProfilePicFile(file);
+        setProfilePicPreview(URL.createObjectURL(file));
+    };
+
+    // ─── SAVE ───
     const handleSave = async () => {
         if (!form.first_name.trim() || !form.last_name.trim()) return;
         if (!canAddStudents) {
@@ -65,7 +103,7 @@ export default function StudentsPage() {
             toast.error('Select a class and house for this student.');
             return;
         }
-        if (!isValidKenyanPhone(form.guardian_phone)) {
+        if (form.guardian_phone && !isValidKenyanPhone(form.guardian_phone)) {
             toast.error('Use a valid Kenyan phone number, e.g. +254712345678.');
             return;
         }
@@ -74,12 +112,10 @@ export default function StudentsPage() {
         try {
             let guardian_id = null;
 
-            // Create/link guardian if name is provided
             if (form.guardian_name.trim()) {
                 const names = form.guardian_name.trim().split(' ');
                 const gFirst = names[0] || '';
                 const gLast = names.slice(1).join(' ') || '';
-
                 const guardianPhone = normalizeKenyanPhone(form.guardian_phone);
 
                 const existing = guardians.find(g =>
@@ -90,7 +126,6 @@ export default function StudentsPage() {
 
                 if (existing) {
                     guardian_id = existing.id;
-                    // Update guardian contact if provided
                     if (guardianPhone || form.guardian_email) {
                         const { error } = await supabase.from('guardians').update({
                             phone: guardianPhone || existing.phone,
@@ -113,6 +148,17 @@ export default function StudentsPage() {
                 }
             }
 
+            // Upload profile picture if provided
+            let profile_picture_url = editingStudent?.profile_picture_url || null;
+            if (profilePicFile) {
+                try {
+                    const result = await uploadToCloudinary(profilePicFile, 'nexalms/students');
+                    profile_picture_url = result.url;
+                } catch (err: any) {
+                    toast.error('Failed to upload profile picture: ' + (err.message || ''));
+                }
+            }
+
             const studentData = {
                 school_id: school!.id,
                 first_name: form.first_name,
@@ -130,6 +176,7 @@ export default function StudentsPage() {
                 special_needs: form.special_needs || null,
                 nationality: form.nationality || 'Kenyan',
                 religion: form.religion || null,
+                profile_picture_url,
             };
 
             if (editingStudent) {
@@ -161,6 +208,8 @@ export default function StudentsPage() {
             setShowModal(false);
             setForm(blankForm);
             setEditingStudent(null);
+            setProfilePicFile(null);
+            setProfilePicPreview('');
             await fetchAll();
         } catch (err: any) {
             toast.error(err.message || 'Failed to save student');
@@ -189,6 +238,8 @@ export default function StudentsPage() {
             nationality: student.nationality || 'Kenyan',
             religion: student.religion || '',
         });
+        setProfilePicPreview(student.profile_picture_url || '');
+        setProfilePicFile(null);
         setShowModal(true);
         setMenuOpen(null);
     };
@@ -203,6 +254,167 @@ export default function StudentsPage() {
             }
         }
         setMenuOpen(null);
+    };
+
+    // ─── IMPORT FROM EXCEL/PDF ───
+    const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+                if (jsonData.length === 0) {
+                    toast.error('No data found in file');
+                    return;
+                }
+
+                const cols = Object.keys(jsonData[0] as any);
+                setImportColumns(cols);
+                setImportData(jsonData);
+
+                // Auto-map columns
+                const autoMap: Record<string, string> = {};
+                const fieldMap: Record<string, string[]> = {
+                    first_name: ['first name', 'firstname', 'first_name', 'fname', 'given name'],
+                    last_name: ['last name', 'lastname', 'last_name', 'lname', 'surname', 'family name'],
+                    gender: ['gender', 'sex'],
+                    admission_number: ['adm no', 'admission number', 'admission_number', 'adm', 'adm_no', 'reg no', 'registration'],
+                    date_of_birth: ['dob', 'date of birth', 'date_of_birth', 'birth date', 'birthday'],
+                    guardian_name: ['guardian', 'parent', 'guardian name', 'parent name', 'guardian_name'],
+                    guardian_phone: ['guardian phone', 'parent phone', 'phone', 'tel', 'guardian_phone'],
+                    nationality: ['nationality', 'country'],
+                    religion: ['religion'],
+                    previous_school: ['previous school', 'previous_school', 'former school'],
+                };
+
+                cols.forEach(col => {
+                    const lc = col.toLowerCase().trim();
+                    for (const [field, keywords] of Object.entries(fieldMap)) {
+                        if (keywords.some(k => lc.includes(k) || lc === k)) {
+                            if (!autoMap[field]) autoMap[field] = col;
+                        }
+                    }
+                });
+
+                setImportMapping(autoMap);
+                setShowImportModal(true);
+                toast.success(`Found ${jsonData.length} records with ${cols.length} columns`);
+            } catch (err: any) {
+                toast.error('Failed to read file: ' + (err.message || 'Unknown error'));
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        // Reset input so same file can be re-selected
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleImportSave = async () => {
+        if (!importMapping.first_name || !importMapping.last_name) {
+            toast.error('Map at least First Name and Last Name columns');
+            return;
+        }
+        setImporting(true);
+        let success = 0, failed = 0;
+
+        for (const row of importData) {
+            try {
+                const firstName = String(row[importMapping.first_name] || '').trim();
+                const lastName = String(row[importMapping.last_name] || '').trim();
+                if (!firstName || !lastName) { failed++; continue; }
+
+                const gender = importMapping.gender ? String(row[importMapping.gender] || '').toLowerCase() : '';
+                const validGender = ['male', 'female', 'other'].includes(gender) ? gender : (gender.startsWith('m') ? 'male' : gender.startsWith('f') ? 'female' : null);
+
+                const studentData: any = {
+                    school_id: school!.id,
+                    first_name: firstName,
+                    last_name: lastName,
+                    gender: validGender,
+                    admission_number: importMapping.admission_number ? String(row[importMapping.admission_number] || '') || null : null,
+                    date_of_birth: importMapping.date_of_birth ? String(row[importMapping.date_of_birth] || '') || null : null,
+                    nationality: importMapping.nationality ? String(row[importMapping.nationality] || 'Kenyan') : 'Kenyan',
+                    religion: importMapping.religion ? String(row[importMapping.religion] || '') || null : null,
+                    previous_school: importMapping.previous_school ? String(row[importMapping.previous_school] || '') || null : null,
+                    class_id: classes.length > 0 ? classes[0].id : null,
+                    house_id: houses.length > 0 ? houses[0].id : null,
+                };
+
+                const { error } = await supabase.from('students').insert(studentData);
+                if (error) { failed++; console.warn('Import error:', error.message); }
+                else success++;
+            } catch { failed++; }
+        }
+
+        toast.success(`Imported ${success} students${failed > 0 ? ` (${failed} failed)` : ''}`);
+        setShowImportModal(false);
+        setImportData([]);
+        setImporting(false);
+        await fetchAll();
+    };
+
+    // ─── DOWNLOAD ───
+    const handleDownload = async () => {
+        let downloadStudents = [...students];
+
+        // Filter based on scope
+        if (dlScope === 'grade' && dlGradeLevel) {
+            const gradeClasses = classes.filter(c => c.grade_level_id === dlGradeLevel).map(c => c.id);
+            downloadStudents = downloadStudents.filter(s => gradeClasses.includes(s.class_id));
+        } else if (dlScope === 'class' && dlClass) {
+            downloadStudents = downloadStudents.filter(s => s.class_id === dlClass);
+        }
+
+        // Gender filter
+        if (dlGender) {
+            downloadStudents = downloadStudents.filter(s => s.gender === dlGender);
+        }
+
+        if (downloadStudents.length === 0) {
+            toast.error('No students found for the selected criteria');
+            return;
+        }
+
+        const scopeLabel = dlScope === 'all' ? 'All Students' :
+            dlScope === 'grade' ? `${gradeLevels.find(g => g.id === dlGradeLevel)?.name || 'Grade'} Students` :
+                `${classes.find(c => c.id === dlClass)?.name || 'Class'} Students`;
+        const genderLabel = dlGender ? ` (${dlGender === 'male' ? 'Boys' : 'Girls'})` : '';
+        const title = `${scopeLabel}${genderLabel}`;
+
+        const headers = ['#', 'Name', 'Adm No.', 'Gender', 'Class', 'House', 'Guardian', 'Status'];
+        const rows = downloadStudents.map((s, i) => [
+            String(i + 1),
+            `${s.first_name} ${s.last_name}`,
+            s.admission_number || '—',
+            s.gender ? s.gender.charAt(0).toUpperCase() + s.gender.slice(1) : '—',
+            s.classes?.name || '—',
+            s.houses?.name || '—',
+            s.guardians ? `${s.guardians.first_name} ${s.guardians.last_name}` : '—',
+            s.status || 'active',
+        ]);
+
+        if (dlFormat === 'csv') {
+            downloadCsv(headers, rows, `students_${dlScope}_${Date.now()}`);
+            toast.success('CSV downloaded');
+        } else {
+            const doc = await createPdfWithHeader({
+                title,
+                subtitle: `Total: ${downloadStudents.length} students — Generated ${new Date().toLocaleDateString('en-GB')}`,
+                schoolName: school?.name || '',
+                schoolMotto: school?.motto || '',
+                logoUrl: school?.logo_url || '',
+                watermarkUrl: school?.watermark_url || school?.logo_url || '',
+            });
+            addTableToPdf(doc, headers, rows);
+            downloadPdf(doc, `students_${dlScope}_${Date.now()}`);
+            toast.success('PDF downloaded');
+        }
+        setShowDownloadModal(false);
     };
 
     const filtered = students.filter(s => {
@@ -220,8 +432,18 @@ export default function StudentsPage() {
                     <p className="page-subtitle">{students.length} students enrolled</p>
                 </div>
                 <div className="flex gap-2">
-                    <button className="btn btn-secondary btn-sm">
-                        <Download size={16} /> Export
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept=".xlsx,.xls,.csv"
+                        style={{ display: 'none' }}
+                        onChange={handleFileImport}
+                    />
+                    <button className="btn btn-download btn-sm" onClick={() => fileInputRef.current?.click()}>
+                        <Upload size={16} /> Import
+                    </button>
+                    <button className="btn btn-download btn-sm" onClick={() => setShowDownloadModal(true)}>
+                        <Download size={16} /> Download
                     </button>
                     <button
                         className="btn btn-primary"
@@ -232,6 +454,8 @@ export default function StudentsPage() {
                             }
                             setEditingStudent(null);
                             setForm({ ...blankForm, admission_date: new Date().toISOString().slice(0, 10) });
+                            setProfilePicFile(null);
+                            setProfilePicPreview('');
                             setShowModal(true);
                         }}
                         id="btn-add-student"
@@ -304,7 +528,14 @@ export default function StudentsPage() {
                                 {filtered.map((s, i) => (
                                     <tr key={s.id}>
                                         <td>{i + 1}</td>
-                                        <td><strong>{s.first_name} {s.last_name}</strong></td>
+                                        <td>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                {s.profile_picture_url ? (
+                                                    <img src={s.profile_picture_url} alt="" style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover' }} />
+                                                ) : null}
+                                                <strong>{s.first_name} {s.last_name}</strong>
+                                            </div>
+                                        </td>
                                         <td>{s.admission_number || '—'}</td>
                                         <td>{s.gender ? s.gender.charAt(0).toUpperCase() + s.gender.slice(1) : '—'}</td>
                                         <td>{s.classes?.name || '—'}</td>
@@ -345,6 +576,36 @@ export default function StudentsPage() {
                             <button className="modal-close" onClick={() => setShowModal(false)}><X size={18} /></button>
                         </div>
                         <div className="modal-body">
+                            {/* Profile Picture Upload */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                                <div
+                                    onClick={() => profilePicRef.current?.click()}
+                                    style={{
+                                        width: 80, height: 80, borderRadius: 8, border: '2px dashed var(--gray-300)',
+                                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        overflow: 'hidden', background: 'var(--gray-50)', flexShrink: 0,
+                                    }}
+                                    title="Click to upload profile picture"
+                                >
+                                    {profilePicPreview ? (
+                                        <img src={profilePicPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        <Camera size={24} style={{ color: 'var(--gray-400)' }} />
+                                    )}
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold">Profile Picture</p>
+                                    <p className="text-xs text-muted">Optional — Click to upload (max 5MB)</p>
+                                </div>
+                                <input
+                                    type="file"
+                                    ref={profilePicRef}
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={handleProfilePicChange}
+                                />
+                            </div>
+
                             <h4 className="text-sm font-semibold mb-2" style={{ color: 'var(--green-700)' }}>Personal Information</h4>
                             <div className="grid-2">
                                 <div className="form-group">
@@ -466,6 +727,114 @@ export default function StudentsPage() {
                             <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.first_name.trim() || !form.last_name.trim() || !form.class_id || !form.house_id}>
                                 {saving ? <span className="spinner" /> : editingStudent ? 'Update Student' : 'Add Student'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Import Modal */}
+            {showImportModal && (
+                <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">📁 Import Students from File</h3>
+                            <button className="modal-close" onClick={() => setShowImportModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <p className="text-sm text-muted mb-4">
+                                Found <strong>{importData.length}</strong> records with <strong>{importColumns.length}</strong> columns.
+                                Map your file columns to student fields below.
+                            </p>
+                            {['first_name', 'last_name', 'gender', 'admission_number', 'date_of_birth', 'guardian_name', 'guardian_phone', 'nationality', 'religion'].map(field => (
+                                <div key={field} className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                                    <label className="form-label" style={{ width: 140, marginBottom: 0, textTransform: 'capitalize' }}>
+                                        {field.replace(/_/g, ' ')} {['first_name', 'last_name'].includes(field) ? '*' : ''}
+                                    </label>
+                                    <select
+                                        className="form-select"
+                                        style={{ flex: 1 }}
+                                        value={importMapping[field] || ''}
+                                        onChange={e => setImportMapping(prev => ({ ...prev, [field]: e.target.value }))}
+                                    >
+                                        <option value="">— Skip —</option>
+                                        {importColumns.map(col => (
+                                            <option key={col} value={col}>{col}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ))}
+                            <p className="form-hint mt-2">Students will be assigned to the first available class and house. You can reassign them after import.</p>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowImportModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleImportSave} disabled={importing || !importMapping.first_name || !importMapping.last_name}>
+                                {importing ? <span className="spinner" /> : `Import ${importData.length} Students`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Download Modal */}
+            {showDownloadModal && (
+                <div className="modal-overlay" onClick={() => setShowDownloadModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">📥 Download Student List</h3>
+                            <button className="modal-close" onClick={() => setShowDownloadModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">What do you want to download?</label>
+                                <select className="form-select" value={dlScope} onChange={e => { setDlScope(e.target.value); setDlGradeLevel(''); setDlClass(''); }}>
+                                    <option value="all">All Students in the School</option>
+                                    <option value="grade">Students by Grade Level</option>
+                                    <option value="class">Students by Specific Class</option>
+                                </select>
+                            </div>
+                            {dlScope === 'grade' && (
+                                <div className="form-group">
+                                    <label className="form-label">Select Grade Level</label>
+                                    <select className="form-select" value={dlGradeLevel} onChange={e => setDlGradeLevel(e.target.value)}>
+                                        <option value="">Choose Grade</option>
+                                        {gradeLevels.map(g => (
+                                            <option key={g.id} value={g.id}>{g.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {dlScope === 'class' && (
+                                <div className="form-group">
+                                    <label className="form-label">Select Class</label>
+                                    <select className="form-select" value={dlClass} onChange={e => setDlClass(e.target.value)}>
+                                        <option value="">Choose Class</option>
+                                        {classes.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            <div className="form-group">
+                                <label className="form-label">Gender Filter</label>
+                                <select className="form-select" value={dlGender} onChange={e => setDlGender(e.target.value)}>
+                                    <option value="">All Students</option>
+                                    <option value="male">Boys Only</option>
+                                    <option value="female">Girls Only</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Format</label>
+                                <select className="form-select" value={dlFormat} onChange={e => setDlFormat(e.target.value)}>
+                                    <option value="pdf">PDF Document</option>
+                                    <option value="csv">CSV Spreadsheet</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowDownloadModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleDownload}>
+                                <Download size={16} /> Download
                             </button>
                         </div>
                     </div>

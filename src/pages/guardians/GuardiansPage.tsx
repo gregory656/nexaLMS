@@ -3,7 +3,8 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { isValidKenyanPhone, normalizeKenyanPhone } from '../../lib/phone';
-import { Plus, Search, Mail, Phone, GraduationCap, X, Edit2 } from 'lucide-react';
+import { Plus, Search, Mail, Phone, GraduationCap, X, Edit2, Download } from 'lucide-react';
+import { createPdfWithHeader, addTableToPdf, downloadPdf } from '../../lib/pdf';
 
 export default function GuardiansPage() {
     const { school } = useAuth();
@@ -14,6 +15,12 @@ export default function GuardiansPage() {
     const [showModal, setShowModal] = useState(false);
     const [selectedGuardian, setSelectedGuardian] = useState<any>(null);
     const [saving, setSaving] = useState(false);
+
+    // Download state
+    const [showDownloadModal, setShowDownloadModal] = useState(false);
+    const [dlScope, setDlScope] = useState('all');
+    const [dlClass, setDlClass] = useState('');
+
     const blankForm = {
         first_name: '',
         last_name: '',
@@ -33,9 +40,9 @@ export default function GuardiansPage() {
         setLoading(true);
         const [{ data, error }, studentRes] = await Promise.all([
             supabase
-            .from('guardians')
-            .select('*, students(first_name, last_name, class_id, classes(name))')
-            .eq('school_id', school.id)
+                .from('guardians')
+                .select('*, students(first_name, last_name, class_id, classes(name))')
+                .eq('school_id', school.id)
                 .order('first_name'),
             supabase
                 .from('students')
@@ -50,6 +57,8 @@ export default function GuardiansPage() {
         setLoading(false);
     };
 
+    const uniqueClasses = Array.from(new Set(students.map(s => s.classes?.name).filter(Boolean)));
+
     useEffect(() => { fetchGuardians(); }, [school?.id]);
 
     const filtered = guardians.filter(g =>
@@ -57,6 +66,38 @@ export default function GuardiansPage() {
         (g.phone && g.phone.includes(searchTerm)) ||
         (g.email && g.email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    const handleDownload = async () => {
+        let dlGuardians = [...guardians];
+        if (dlScope === 'class' && dlClass) {
+            dlGuardians = guardians.filter(g => g.students?.some((s: any) => s.classes?.name === dlClass));
+        }
+
+        if (dlGuardians.length === 0) {
+            toast.error('No guardians found for this criteria');
+            return;
+        }
+
+        const doc = await createPdfWithHeader({
+            title: 'Guardians & Parents List',
+            subtitle: dlScope === 'all' ? 'All Guardians' : `Guardians for ${dlClass}`,
+            schoolName: school?.name || 'School Name',
+            schoolMotto: school?.motto || '',
+            logoUrl: school?.logo_url || '',
+        });
+
+        const headers = ['Guardian Name', 'Relationship', 'Phone / Email', 'Linked Students'];
+        const rows = dlGuardians.map(g => [
+            `${g.first_name} ${g.last_name}`,
+            g.relationship || '—',
+            `${g.phone || '—'} \n${g.email || ''}`,
+            g.students?.map((s: any) => `${s.first_name} ${s.last_name} (${s.classes?.name || 'No Class'})`).join(',\n') || '—'
+        ]);
+
+        addTableToPdf(doc, headers, rows);
+        downloadPdf(doc, `guardians_${dlScope}_${Date.now()}`);
+        setShowDownloadModal(false);
+    };
 
     const openNewGuardian = () => {
         if (students.length === 0) {
@@ -154,9 +195,14 @@ export default function GuardiansPage() {
                     <h1 className="page-title">Guardians & Parents</h1>
                     <p className="page-subtitle">Manage family contacts and student relationships</p>
                 </div>
-                <button className="btn btn-primary" onClick={openNewGuardian}>
-                    <Plus size={18} /> New Guardian
-                </button>
+                <div className="flex gap-2">
+                    <button className="btn btn-download" onClick={() => setShowDownloadModal(true)}>
+                        <Download size={18} /> Download
+                    </button>
+                    <button className="btn btn-primary" onClick={openNewGuardian}>
+                        <Plus size={18} /> New Guardian
+                    </button>
+                </div>
             </div>
 
             <div className="card mb-4">
@@ -315,6 +361,43 @@ export default function GuardiansPage() {
                             <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
                             <button className="btn btn-primary" onClick={handleSave} disabled={saving || !form.first_name.trim() || !form.last_name.trim() || (!selectedGuardian && !form.student_id)}>
                                 {saving ? <span className="spinner" /> : 'Save Guardian'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showDownloadModal && (
+                <div className="modal-overlay" onClick={() => setShowDownloadModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Download Guardians</h3>
+                            <button className="modal-close" onClick={() => setShowDownloadModal(false)}><X size={18} /></button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Download Scope</label>
+                                <select className="form-select" value={dlScope} onChange={e => setDlScope(e.target.value)}>
+                                    <option value="all">All Guardians</option>
+                                    <option value="class">By Student Class</option>
+                                </select>
+                            </div>
+                            {dlScope === 'class' && (
+                                <div className="form-group">
+                                    <label className="form-label">Select Class</label>
+                                    <select className="form-select" value={dlClass} onChange={e => setDlClass(e.target.value)}>
+                                        <option value="">Select a class...</option>
+                                        {uniqueClasses.map(c => (
+                                            <option key={String(c)} value={String(c)}>{String(c)}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowDownloadModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleDownload} disabled={dlScope === 'class' && !dlClass}>
+                                Download PDF
                             </button>
                         </div>
                     </div>

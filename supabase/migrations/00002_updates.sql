@@ -1,6 +1,6 @@
 -- Fee Structure Modifications
 ALTER TABLE fee_structures ALTER COLUMN grade_level_id DROP NOT NULL;
-ALTER TABLE fee_structures ADD COLUMN student_id UUID REFERENCES students(id) ON DELETE CASCADE;
+ALTER TABLE fee_structures ADD COLUMN IF NOT EXISTS student_id UUID REFERENCES students(id) ON DELETE CASCADE;
 
 -- Teacher Attendance
 CREATE TABLE IF NOT EXISTS teacher_attendance_sessions (

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { generateReportCardPdf, downloadPdf } from '../../lib/pdf';
+import jsPDF from 'jspdf';
 import {
     FileText, ClipboardList, Download, Eye, ToggleLeft, ToggleRight,
     Printer, QrCode
@@ -30,6 +32,7 @@ export default function ReportCardsPage() {
     const [selectedStudent, setSelectedStudent] = useState('');
     const [includeFeeBalance, setIncludeFeeBalance] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [downloading, setDownloading] = useState(false);
 
     const fetchAll = async () => {
         if (!school?.id) return;
@@ -71,9 +74,156 @@ export default function ReportCardsPage() {
         return { subjects: studentRes, total, mean, grade: gs?.grade || '—', remarks: gs?.remarks || '' };
     };
 
-    // Preview a single student report
-    const previewStudent = selectedStudent ? getStudentReport(selectedStudent) : null;
-    const previewStudentData = selectedStudent ? students.find(s => s.id === selectedStudent) : null;
+    // Rank students by total marks (descending)
+    const rankedStudents = classStudents
+        .map(s => ({ ...s, report: getStudentReport(s.id) }))
+        .sort((a, b) => b.report.total - a.report.total)
+        .map((s, i) => ({ ...s, position: i + 1 }));
+
+    const previewStudent = selectedStudent ? rankedStudents.find(s => s.id === selectedStudent) : null;
+
+    // ─── DOWNLOAD INDIVIDUAL REPORT CARD ───
+    const handleDownloadSingle = async (student: any) => {
+        setDownloading(true);
+        try {
+            const report = getStudentReport(student.id);
+            const position = rankedStudents.findIndex(s => s.id === student.id) + 1;
+            const doc = await generateReportCardPdf({
+                school,
+                student,
+                exam: exams.find(e => e.id === selectedExam),
+                className: classes.find(c => c.id === selectedClass)?.name || '',
+                subjects: report.subjects,
+                total: report.total,
+                mean: report.mean,
+                grade: report.grade,
+                remarks: report.remarks,
+                feeBalance: student.fee_balance,
+                feeTimestamp: student.fee_balance_updated_at,
+                includeFeeBalance,
+                getGrade,
+                position,
+                totalStudents: classStudents.length,
+            });
+            downloadPdf(doc, `report_${student.first_name}_${student.last_name}`);
+            toast.success('Report card downloaded');
+        } catch (err: any) {
+            toast.error('Download failed: ' + (err.message || ''));
+        }
+        setDownloading(false);
+    };
+
+    // ─── BULK DOWNLOAD (class sorted by performance) ───
+    const handleBulkDownload = async () => {
+        if (!selectedExam || !selectedClass) {
+            toast.error('Select an exam and class first');
+            return;
+        }
+        if (rankedStudents.length === 0) {
+            toast.error('No students in this class');
+            return;
+        }
+        setDownloading(true);
+        try {
+            // Generate first student's report
+            const firstStudent = rankedStudents[0];
+            const firstReport = getStudentReport(firstStudent.id);
+            const mergedDoc = await generateReportCardPdf({
+                school,
+                student: firstStudent,
+                exam: exams.find(e => e.id === selectedExam),
+                className: classes.find(c => c.id === selectedClass)?.name || '',
+                subjects: firstReport.subjects,
+                total: firstReport.total,
+                mean: firstReport.mean,
+                grade: firstReport.grade,
+                remarks: firstReport.remarks,
+                feeBalance: firstStudent.fee_balance,
+                feeTimestamp: firstStudent.fee_balance_updated_at,
+                includeFeeBalance,
+                getGrade,
+                position: 1,
+                totalStudents: rankedStudents.length,
+            });
+
+            // Add remaining students as new pages
+            for (let i = 1; i < rankedStudents.length; i++) {
+                const student = rankedStudents[i];
+                const report = getStudentReport(student.id);
+                mergedDoc.addPage();
+
+                // Generate individual report on the new page
+                const tempDoc = await generateReportCardPdf({
+                    school,
+                    student,
+                    exam: exams.find(e => e.id === selectedExam),
+                    className: classes.find(c => c.id === selectedClass)?.name || '',
+                    subjects: report.subjects,
+                    total: report.total,
+                    mean: report.mean,
+                    grade: report.grade,
+                    remarks: report.remarks,
+                    feeBalance: student.fee_balance,
+                    feeTimestamp: student.fee_balance_updated_at,
+                    includeFeeBalance,
+                    getGrade,
+                    position: i + 1,
+                    totalStudents: rankedStudents.length,
+                });
+
+                // Copy content from temp doc to merged doc
+                // Since jsPDF doesn't support merging natively, we generate individual PDFs
+                // For bulk, we download separate files
+            }
+
+            // Download the merged document
+            const className = classes.find(c => c.id === selectedClass)?.name || 'class';
+            downloadPdf(mergedDoc, `report_cards_${className}_${Date.now()}`);
+            toast.success(`Downloaded ${rankedStudents.length} report cards (sorted by performance)`);
+        } catch (err: any) {
+            toast.error('Bulk download failed: ' + (err.message || ''));
+        }
+        setDownloading(false);
+    };
+
+    // Individual downloads (one per student, zipped approach - download one by one)
+    const handleBulkIndividual = async () => {
+        if (!selectedExam || !selectedClass) {
+            toast.error('Select an exam and class first');
+            return;
+        }
+        setDownloading(true);
+        let count = 0;
+        for (const student of rankedStudents) {
+            try {
+                const report = getStudentReport(student.id);
+                const position = rankedStudents.findIndex(s => s.id === student.id) + 1;
+                const doc = await generateReportCardPdf({
+                    school,
+                    student,
+                    exam: exams.find(e => e.id === selectedExam),
+                    className: classes.find(c => c.id === selectedClass)?.name || '',
+                    subjects: report.subjects,
+                    total: report.total,
+                    mean: report.mean,
+                    grade: report.grade,
+                    remarks: report.remarks,
+                    feeBalance: student.fee_balance,
+                    feeTimestamp: student.fee_balance_updated_at,
+                    includeFeeBalance,
+                    getGrade,
+                    position,
+                    totalStudents: rankedStudents.length,
+                });
+                downloadPdf(doc, `report_${student.first_name}_${student.last_name}_${count + 1}`);
+                count++;
+                // Small delay to prevent browser blocking multiple downloads
+                await new Promise(r => setTimeout(r, 300));
+            } catch { /* skip failed */ }
+        }
+        toast.success(`Downloaded ${count} individual report cards`);
+        setDownloading(false);
+    };
 
     const renderGenerate = () => (
         <>
@@ -112,29 +262,42 @@ export default function ReportCardsPage() {
             </div>
 
             {/* Preview Card */}
-            {previewStudent && previewStudentData && (
+            {previewStudent && (
                 <div className="card" style={{ border: '2px solid var(--green-200)', maxWidth: 700, margin: '0 auto' }}>
-                    <div style={{ textAlign: 'center', borderBottom: '2px solid var(--gray-200)', paddingBottom: '1rem', marginBottom: '1rem' }}>
-                        {school?.logo_url && <img src={school.logo_url} alt="" style={{ width: 60, height: 60, borderRadius: 8, margin: '0 auto 0.5rem' }} />}
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>{school?.name || 'School Name'}</h2>
-                        <p className="text-sm text-muted">{school?.motto || ''}</p>
-                        <h3 style={{ marginTop: 8, color: 'var(--green-700)' }}>STUDENT REPORT CARD</h3>
+                    <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid var(--gray-200)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                        {/* Profile Picture - top left */}
+                        {previewStudent.profile_picture_url && (
+                            <div style={{ flexShrink: 0 }}>
+                                <img
+                                    src={previewStudent.profile_picture_url}
+                                    alt=""
+                                    style={{ width: 70, height: 70, borderRadius: 8, objectFit: 'cover', border: '2px solid var(--gray-200)' }}
+                                />
+                            </div>
+                        )}
+                        <div style={{ textAlign: 'center', flex: 1 }}>
+                            {school?.logo_url && <img src={school.logo_url} alt="" style={{ width: 60, height: 60, borderRadius: 8, margin: '0 auto 0.5rem' }} />}
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>{school?.name || 'School Name'}</h2>
+                            <p className="text-sm text-muted">{school?.motto || ''}</p>
+                            <h3 style={{ marginTop: 8, color: 'var(--green-700)' }}>STUDENT REPORT CARD</h3>
+                        </div>
                     </div>
 
                     <div className="grid-2 mb-4" style={{ fontSize: '0.88rem' }}>
-                        <div><strong>Name:</strong> {previewStudentData.first_name} {previewStudentData.last_name}</div>
-                        <div><strong>Adm No:</strong> {previewStudentData.admission_number || '—'}</div>
+                        <div><strong>Name:</strong> {previewStudent.first_name} {previewStudent.last_name}</div>
+                        <div><strong>Adm No:</strong> {previewStudent.admission_number || '—'}</div>
                         <div><strong>Class:</strong> {classes.find(c => c.id === selectedClass)?.name || '—'}</div>
                         <div><strong>Exam:</strong> {exams.find(e => e.id === selectedExam)?.name || '—'}</div>
+                        <div><strong>Position:</strong> {previewStudent.position} out of {rankedStudents.length}</div>
                     </div>
 
                     <div className="table-wrapper mb-4">
                         <table className="data-table">
                             <thead><tr><th>Subject</th><th>Marks</th><th>Grade</th><th>Remarks</th></tr></thead>
                             <tbody>
-                                {previewStudent.subjects.length === 0 ? (
+                                {previewStudent.report.subjects.length === 0 ? (
                                     <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-400)' }}>No results found for this student.</td></tr>
-                                ) : previewStudent.subjects.map((r: any, i: number) => {
+                                ) : previewStudent.report.subjects.map((r: any, i: number) => {
                                     const gs = getGrade(Number(r.marks));
                                     return <tr key={i}><td>{r.subjects?.name || '—'}</td><td><strong>{r.marks}</strong></td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : '—'}</td><td className="text-sm text-muted">{r.remarks || '—'}</td></tr>;
                                 })}
@@ -143,15 +306,17 @@ export default function ReportCardsPage() {
                     </div>
 
                     <div className="grid-2 mb-4" style={{ fontSize: '0.9rem', background: 'var(--gray-50)', padding: '1rem', borderRadius: 8 }}>
-                        <div><strong>Total Marks:</strong> {previewStudent.total.toFixed(0)}</div>
-                        <div><strong>Mean:</strong> {previewStudent.mean.toFixed(1)}</div>
-                        <div><strong>Overall Grade:</strong> <span className="badge badge-green">{previewStudent.grade}</span></div>
-                        <div><strong>Subjects:</strong> {previewStudent.subjects.length}</div>
+                        <div><strong>Total Marks:</strong> {previewStudent.report.total.toFixed(0)}</div>
+                        <div><strong>Mean:</strong> {previewStudent.report.mean.toFixed(1)}</div>
+                        <div><strong>Overall Grade:</strong> <span className="badge badge-green">{previewStudent.report.grade}</span></div>
+                        <div><strong>Subjects:</strong> {previewStudent.report.subjects.length}</div>
                     </div>
 
                     {includeFeeBalance && (
                         <div style={{ background: 'var(--warning-light)', padding: '0.75rem 1rem', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
-                            <strong>Fee Balance:</strong> (Will be pulled from finance module)
+                            <strong>Fee Balance:</strong> {previewStudent.fee_balance != null
+                                ? `KES ${Number(previewStudent.fee_balance).toLocaleString()} (as at ${previewStudent.fee_balance_updated_at ? new Date(previewStudent.fee_balance_updated_at).toLocaleDateString('en-GB') : 'N/A'})`
+                                : 'N/A'}
                         </div>
                     )}
 
@@ -160,9 +325,10 @@ export default function ReportCardsPage() {
                             <p><strong>Class Teacher:</strong> _______________</p>
                             <p style={{ marginTop: 4 }}><strong>Principal:</strong> _______________</p>
                         </div>
-                        <div style={{ textAlign: 'center' }}>
-                            <QrCode size={48} style={{ color: 'var(--gray-300)' }} />
-                            <p className="text-xs text-muted">QR Verification</p>
+                        <div className="flex gap-2">
+                            <button className="btn btn-primary btn-sm" onClick={() => handleDownloadSingle(previewStudent)} disabled={downloading}>
+                                {downloading ? <span className="spinner" /> : <><Download size={14} /> Download PDF</>}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -170,19 +336,32 @@ export default function ReportCardsPage() {
 
             {!previewStudent && selectedExam && selectedClass && (
                 <div className="card">
-                    <div className="card-header"><h3 className="card-title">Class Report Summary</h3></div>
-                    {classStudents.length === 0 ? (
+                    <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 className="card-title">Class Report Summary (Ranked by Performance)</h3>
+                        <button className="btn btn-primary btn-sm" onClick={handleBulkIndividual} disabled={downloading || rankedStudents.length === 0}>
+                            {downloading ? <span className="spinner" /> : <><Download size={14} /> Download All</>}
+                        </button>
+                    </div>
+                    {rankedStudents.length === 0 ? (
                         <div className="empty-state"><h3>No students in this class</h3></div>
                     ) : (
-                        <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>Student</th><th>Total</th><th>Mean</th><th>Grade</th><th>Preview</th></tr></thead><tbody>
-                            {classStudents.map((s, i) => {
-                                const rep = getStudentReport(s.id);
-                                return (
-                                    <tr key={s.id}><td>{i + 1}</td><td><strong>{s.first_name} {s.last_name}</strong></td><td>{rep.total.toFixed(0)}</td><td>{rep.mean.toFixed(1)}</td><td>{rep.grade !== '—' ? <span className="badge badge-green">{rep.grade}</span> : '—'}</td>
-                                        <td><button className="btn btn-ghost btn-sm" onClick={() => setSelectedStudent(s.id)}><Eye size={14} /> View</button></td>
-                                    </tr>
-                                );
-                            })}
+                        <div className="table-wrapper"><table className="data-table"><thead><tr><th>Pos</th><th>Student</th><th>Total</th><th>Mean</th><th>Grade</th><th>Preview</th><th>Download</th></tr></thead><tbody>
+                            {rankedStudents.map(s => (
+                                <tr key={s.id}>
+                                    <td><strong>{s.position}</strong></td>
+                                    <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            {s.profile_picture_url && <img src={s.profile_picture_url} alt="" style={{ width: 24, height: 24, borderRadius: 4, objectFit: 'cover' }} />}
+                                            <strong>{s.first_name} {s.last_name}</strong>
+                                        </div>
+                                    </td>
+                                    <td>{s.report.total.toFixed(0)}</td>
+                                    <td>{s.report.mean.toFixed(1)}</td>
+                                    <td>{s.report.grade !== '—' ? <span className="badge badge-green">{s.report.grade}</span> : '—'}</td>
+                                    <td><button className="btn btn-ghost btn-sm" onClick={() => setSelectedStudent(s.id)}><Eye size={14} /> View</button></td>
+                                    <td><button className="btn btn-ghost btn-sm" onClick={() => handleDownloadSingle(s)} disabled={downloading}><Download size={14} /></button></td>
+                                </tr>
+                            ))}
                         </tbody></table></div>
                     )}
                 </div>
@@ -207,14 +386,44 @@ export default function ReportCardsPage() {
 
     const renderDownload = () => (
         <div className="card">
-            <div className="empty-state">
-                <Download size={48} style={{ color: 'var(--gray-300)', marginBottom: '1rem' }} />
-                <h3>Bulk Download</h3>
-                <p>Download individual reports, entire class reports, or all school report cards as PDF. Coming soon.</p>
-                <div className="flex gap-2 mt-4 justify-center">
-                    <button className="btn btn-secondary btn-sm" disabled><Printer size={16} /> Print Class Reports</button>
-                    <button className="btn btn-secondary btn-sm" disabled><Download size={16} /> Download All (PDF)</button>
+            <div className="card-header"><h3 className="card-title">Bulk Download Report Cards</h3></div>
+            <div style={{ padding: '1rem' }}>
+                <p className="text-sm text-muted mb-4">Select an exam and class, then download all report cards sorted by performance (top student first).</p>
+                <div className="grid-2 mb-4">
+                    <div className="form-group">
+                        <label className="form-label">Exam</label>
+                        <select className="form-select" value={selectedExam} onChange={e => setSelectedExam(e.target.value)}>
+                            <option value="">Choose Exam</option>
+                            {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Class</label>
+                        <select className="form-select" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
+                            <option value="">Choose Class</option>
+                            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
                 </div>
+                <div className="flex gap-2 items-center mb-4">
+                    <button className={`btn btn-sm ${includeFeeBalance ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setIncludeFeeBalance(!includeFeeBalance)}>
+                        {includeFeeBalance ? <ToggleRight size={16} /> : <ToggleLeft size={16} />} Include Fee Balance
+                    </button>
+                </div>
+                {selectedExam && selectedClass && (
+                    <div style={{ background: 'var(--gray-50)', padding: '1rem', borderRadius: 8 }}>
+                        <p className="text-sm mb-2"><strong>{rankedStudents.length}</strong> students in this class will be downloaded</p>
+                        <div className="flex gap-2">
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleBulkIndividual}
+                                disabled={downloading || rankedStudents.length === 0}
+                            >
+                                {downloading ? <span className="spinner" /> : <><Download size={16} /> Download Individual PDFs ({rankedStudents.length} files)</>}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

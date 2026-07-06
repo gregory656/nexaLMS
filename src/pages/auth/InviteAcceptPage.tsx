@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ShieldCheck, Lock } from 'lucide-react';
+import { ShieldCheck, Lock, CheckCircle, ExternalLink } from 'lucide-react';
 import nexagenImage from '../../assets/nexagen.png';
 import toast from 'react-hot-toast';
 
 export default function InviteAcceptPage() {
-    const navigate = useNavigate();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [accountCreated, setAccountCreated] = useState(false);
 
     const handleCreateAccount = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,7 +22,6 @@ export default function InviteAcceptPage() {
         setSubmitting(true);
 
         try {
-            // Update user password immediately
             const { error } = await supabase.auth.updateUser({ password });
 
             if (error) {
@@ -36,16 +34,51 @@ export default function InviteAcceptPage() {
                 return;
             }
 
-            // Success — sign out so they can sign in with new credentials
+            // Sign out so they can sign in with new credentials
             await supabase.auth.signOut();
-
-            toast.success("Account created successfully! Please sign in with your new password.");
-            navigate('/auth/login');
+            toast.success("Account created successfully!");
+            setAccountCreated(true);
         } catch (error: any) {
             toast.error(error.message || "Failed to create account. Please try again.");
             setSubmitting(false);
         }
     };
+
+    // Success screen
+    if (accountCreated) {
+        return (
+            <div className="auth-page">
+                <div className="auth-card" style={{ textAlign: 'center' }}>
+                    <div className="auth-visual">
+                        <img src={nexagenImage} alt="" />
+                        <ShieldCheck size={22} />
+                    </div>
+                    <div style={{ margin: '1.5rem 0' }}>
+                        <CheckCircle size={56} style={{ color: 'var(--green-600)', margin: '0 auto 1rem' }} />
+                        <h2 className="auth-title" style={{ color: 'var(--green-700)' }}>Account Created!</h2>
+                        <p className="auth-subtitle" style={{ marginTop: '0.5rem', lineHeight: 1.6 }}>
+                            Your account has been created successfully.<br />
+                            You can now log in using your email and the password you just set.
+                        </p>
+                    </div>
+
+                    <a
+                        href="https://nexagen.co.ke"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-primary btn-lg btn-full"
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    >
+                        <ExternalLink size={18} /> Go to nexagen.co.ke to Login
+                    </a>
+
+                    <p className="text-sm text-center text-muted mt-4">
+                        Or <a href="/auth/login" className="underline font-bold">sign in here</a> if you're already on the platform.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="auth-page">

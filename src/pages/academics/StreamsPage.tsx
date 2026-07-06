@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Plus, Home, Layers, School, X, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Home, Layers, School, X, Edit2, Trash2, Download } from 'lucide-react';
+import { createPdfWithHeader, addTableToPdf, downloadPdf } from '../../lib/pdf';
 
 export default function StreamsPage() {
     const { school } = useAuth();
@@ -236,14 +237,43 @@ export default function StreamsPage() {
         }
     };
 
+    const handleDownload = async () => {
+        if (!classes.length) {
+            toast.error('No classes found');
+            return;
+        }
+
+        const doc = await createPdfWithHeader({
+            title: 'School Classes & Streams List',
+            subtitle: `${classes.length} classes defined`,
+            schoolName: school?.name || 'School Name',
+            schoolMotto: school?.motto || '',
+            logoUrl: school?.logo_url || '',
+        });
+
+        const headers = ['Class Name', 'Grade Level', 'Stream', 'Status'];
+        const rows = classes.map(c => [
+            c.name,
+            c.grade_levels?.name || '—',
+            c.streams?.name || '—',
+            c.status || 'Active'
+        ]);
+
+        addTableToPdf(doc, headers, rows);
+        downloadPdf(doc, `classes_streams_${Date.now()}`);
+    };
+
     return (
         <>
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">Academic Structure</h1>
-                    <p className="page-subtitle">Manage your school's streams, grades, and class groups</p>
+                    <h1 className="page-title">Streams & Classes</h1>
+                    <p className="page-subtitle">Configure terms, streams, and physical classes based on the new curriculum</p>
                 </div>
                 <div className="flex gap-2">
+                    <button className="btn btn-download" onClick={handleDownload} disabled={classes.length === 0}>
+                        <Download size={18} /> Download
+                    </button>
                     {activeTab === 'streams' && (
                         <button className="btn btn-primary" onClick={() => setShowStreamModal(true)}>
                             <Plus size={18} /> New Stream

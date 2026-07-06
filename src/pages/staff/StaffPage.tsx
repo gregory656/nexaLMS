@@ -3,8 +3,9 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { isValidKenyanPhone, normalizeKenyanPhone } from '../../lib/phone';
-import { Plus, Search, MoreVertical, Shield, Mail, Phone, X, Trash2, Edit2, BookOpen, Link2, Users } from 'lucide-react';
+import { Plus, Search, MoreVertical, Shield, Mail, Phone, X, Trash2, Edit2, BookOpen, Link2, Users, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { createPdfWithHeader, addTableToPdf, downloadPdf } from '../../lib/pdf';
 
 export default function StaffPage() {
     const { school } = useAuth();
@@ -336,6 +337,51 @@ export default function StaffPage() {
         setMenuOpen(null);
     };
 
+    const handleDownload = async () => {
+        if (activeTab === 'staff') {
+            if (!staff.length) return toast.error('No staff records found');
+            const doc = await createPdfWithHeader({
+                title: 'Staff & Teachers List',
+                subtitle: `${staff.length} staff members found`,
+                schoolName: school?.name || 'School Name',
+                schoolMotto: school?.motto || '',
+                logoUrl: school?.logo_url || '',
+            });
+
+            const headers = ['Name', 'Email', 'Phone', 'TSC No.', 'Roles'];
+            const rows = staff.map(member => [
+                `${member.first_name} ${member.last_name}`,
+                member.email || '—',
+                member.phone || '—',
+                member.tsc_number || '—',
+                (member.user_roles || []).map((ur: any) => ur.roles?.display_name).join(', ') || 'None'
+            ]);
+
+            addTableToPdf(doc, headers, rows);
+            downloadPdf(doc, `staff_list_${Date.now()}`);
+        } else {
+            if (!combinations.length) return toast.error('No subject combinations found');
+            const doc = await createPdfWithHeader({
+                title: 'Subject Combinations',
+                subtitle: `${combinations.length} combinations defined`,
+                schoolName: school?.name || 'School Name',
+                schoolMotto: school?.motto || '',
+                logoUrl: school?.logo_url || '',
+            });
+
+            const headers = ['Teacher', 'Subject', 'Class', 'Lessons/Week'];
+            const rows = combinations.map(c => [
+                `${c.teachers?.first_name} ${c.teachers?.last_name}`,
+                c.subjects?.name || '—',
+                c.classes?.name || '—',
+                String(c.lessons_per_week || 5)
+            ]);
+
+            addTableToPdf(doc, headers, rows);
+            downloadPdf(doc, `subject_combinations_${Date.now()}`);
+        }
+    };
+
     return (
         <>
             <div className="page-header">
@@ -344,6 +390,9 @@ export default function StaffPage() {
                     <p className="page-subtitle">Manage educators and administrative personnel</p>
                 </div>
                 <div className="flex gap-2">
+                    <button className="btn btn-download" onClick={handleDownload}>
+                        <Download size={18} /> Download
+                    </button>
                     {activeTab === 'combinations' && (
                         <button className="btn btn-primary" onClick={() => openComboModal()}>
                             <Plus size={18} /> Add Combination
@@ -367,86 +416,86 @@ export default function StaffPage() {
             </div>
 
             {activeTab === 'staff' && (
-            <>
-            <div className="card mb-4">
-                <div className="header-search" style={{ maxWidth: '320px' }}>
-                    <Search />
-                    <input
-                        type="text"
-                        placeholder="Search staff by name or email..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
-                </div>
-            </div>
-
-            <div className="card">
-                {loading ? <div className="flex justify-center p-8"><span className="spinner" /></div> : (
-                    <div className="table-wrapper">
-                        <table className="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Contact</th>
-                                    <th>TSC No.</th>
-                                    <th>Roles</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {staff.filter(s => `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())).map(member => (
-                                    <tr key={member.id}>
-                                        <td>
-                                            <div className="flex items-center gap-3">
-                                                <div className="sidebar-user-avatar">{member.first_name[0]}{member.last_name[0]}</div>
-                                                <div>
-                                                    <div className="font-semibold">{member.first_name} {member.last_name}</div>
-                                                    <div className="text-xs text-muted">{member.employment_type}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div className="text-sm"><Mail size={12} className="inline mr-1" /> {member.email || '—'}</div>
-                                            <div className="text-sm"><Phone size={12} className="inline mr-1" /> {member.phone || '—'}</div>
-                                        </td>
-                                        <td>{member.tsc_number || '—'}</td>
-                                        <td>
-                                            <div className="flex gap-1 flex-wrap">
-                                                {member.user_roles?.map((ur: any) => (
-                                                    <span key={ur.role_id} className="badge badge-blue">{ur.roles?.display_name}</span>
-                                                )) || <span className="text-xs text-muted">No roles</span>}
-                                            </div>
-                                        </td>
-                                        <td><span className="badge badge-green">{member.status}</span></td>
-                                        <td>
-                                            <div className="dropdown">
-                                                <button className="btn btn-ghost btn-sm" onClick={() => setMenuOpen(menuOpen === member.id ? null : member.id)}>
-                                                    <MoreVertical size={16} />
-                                                </button>
-                                                {menuOpen === member.id && (
-                                                    <div className="dropdown-menu">
-                                                        <button className="dropdown-item" onClick={() => openRoleAssignment(member)}>
-                                                            <Shield size={14} /> Assign Roles
-                                                        </button>
-                                                        <button className="dropdown-item" onClick={() => openStaffModal(member)}>
-                                                            <Edit2 size={14} /> Edit Info
-                                                        </button>
-                                                        <button className="dropdown-item" onClick={() => handleDeleteStaff(member.id)} style={{ color: 'var(--danger)' }}>
-                                                            <Trash2 size={14} /> Remove
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                <>
+                    <div className="card mb-4">
+                        <div className="header-search" style={{ maxWidth: '320px' }}>
+                            <Search />
+                            <input
+                                type="text"
+                                placeholder="Search staff by name or email..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                            />
+                        </div>
                     </div>
-                )}
-            </div>
-            </>
+
+                    <div className="card">
+                        {loading ? <div className="flex justify-center p-8"><span className="spinner" /></div> : (
+                            <div className="table-wrapper">
+                                <table className="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Contact</th>
+                                            <th>TSC No.</th>
+                                            <th>Roles</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {staff.filter(s => `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase())).map(member => (
+                                            <tr key={member.id}>
+                                                <td>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="sidebar-user-avatar">{member.first_name[0]}{member.last_name[0]}</div>
+                                                        <div>
+                                                            <div className="font-semibold">{member.first_name} {member.last_name}</div>
+                                                            <div className="text-xs text-muted">{member.employment_type}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="text-sm"><Mail size={12} className="inline mr-1" /> {member.email || '—'}</div>
+                                                    <div className="text-sm"><Phone size={12} className="inline mr-1" /> {member.phone || '—'}</div>
+                                                </td>
+                                                <td>{member.tsc_number || '—'}</td>
+                                                <td>
+                                                    <div className="flex gap-1 flex-wrap">
+                                                        {member.user_roles?.map((ur: any) => (
+                                                            <span key={ur.role_id} className="badge badge-blue">{ur.roles?.display_name}</span>
+                                                        )) || <span className="text-xs text-muted">No roles</span>}
+                                                    </div>
+                                                </td>
+                                                <td><span className="badge badge-green">{member.status}</span></td>
+                                                <td>
+                                                    <div className="dropdown">
+                                                        <button className="btn btn-ghost btn-sm" onClick={() => setMenuOpen(menuOpen === member.id ? null : member.id)}>
+                                                            <MoreVertical size={16} />
+                                                        </button>
+                                                        {menuOpen === member.id && (
+                                                            <div className="dropdown-menu">
+                                                                <button className="dropdown-item" onClick={() => openRoleAssignment(member)}>
+                                                                    <Shield size={14} /> Assign Roles
+                                                                </button>
+                                                                <button className="dropdown-item" onClick={() => openStaffModal(member)}>
+                                                                    <Edit2 size={14} /> Edit Info
+                                                                </button>
+                                                                <button className="dropdown-item" onClick={() => handleDeleteStaff(member.id)} style={{ color: 'var(--danger)' }}>
+                                                                    <Trash2 size={14} /> Remove
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </>
             )}
 
             {activeTab === 'combinations' && (

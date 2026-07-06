@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import {
     LayoutDashboard, DollarSign, CreditCard, BarChart3,
-    Plus, X, Users, Download
+    Plus, X, Download
 } from 'lucide-react';
 
 const TABS = [
@@ -21,8 +21,7 @@ export default function FinancePage() {
 
     const [feeCategories, setFeeCategories] = useState<any[]>([]);
     const [feeStructures, setFeeStructures] = useState<any[]>([]);
-    const [invoices, setInvoices] = useState<any[]>([]);
-    const [payments, setPayments] = useState<any[]>([]);
+    const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
     const [students, setStudents] = useState<any[]>([]);
     const [gradeLevels, setGradeLevels] = useState<any[]>([]);
     const [academicYears, setAcademicYears] = useState<any[]>([]);
@@ -31,39 +30,53 @@ export default function FinancePage() {
     // Fee setup
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [showFeeModal, setShowFeeModal] = useState(false);
+    const [showTransactionModal, setShowTransactionModal] = useState(false);
     const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
-    const [feeForm, setFeeForm] = useState({ target_type: 'grade', grade_level_id: '', student_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
+    const [feeForm, setFeeForm] = useState({ target_type: 'grade', grade_level_id: '', student_id: '', class_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
+    const [transactionForm, setTransactionForm] = useState({ student_id: '', transaction_type: 'payment', amount: '', description: '', payment_method: 'mpesa', reference_number: '' });
     const [saving, setSaving] = useState(false);
 
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const [fcRes, fsRes, invRes, payRes, stuRes, glRes, ayRes, tRes] = await Promise.all([
-            supabase.from('fee_categories').select('*').eq('school_id', school.id).order('name'),
-            supabase.from('fee_structures').select('*, fee_categories(name), grade_levels(name), academic_years(name), terms(name)').eq('school_id', school.id),
-            supabase.from('invoices').select('*, students(first_name, last_name, admission_number)').eq('school_id', school.id).order('created_at', { ascending: false }).limit(100),
-            supabase.from('payments').select('*, students(first_name, last_name), invoices(invoice_number, total_amount)').eq('school_id', school.id).order('payment_date', { ascending: false }).limit(100),
-            supabase.from('students').select('*').eq('school_id', school.id).eq('status', 'active'),
-            supabase.from('grade_levels').select('*').eq('school_id', school.id).order('level_order'),
-            supabase.from('academic_years').select('*').eq('school_id', school.id).order('start_date', { ascending: false }),
-            supabase.from('terms').select('*').eq('school_id', school.id).order('term_number'),
-        ]);
-        setFeeCategories(fcRes.data || []);
-        setFeeStructures(fsRes.data || []);
-        setInvoices(invRes.data || []);
-        setPayments(payRes.data || []);
-        setStudents(stuRes.data || []);
-        setGradeLevels(glRes.data || []);
-        setAcademicYears(ayRes.data || []);
-        setTerms(tRes.data || []);
-        setLoading(false);
+        try {
+            const [fcRes, fsRes, ledRes, stuRes, glRes, ayRes, tRes] = await Promise.all([
+                supabase.from('fee_categories').select('*').eq('school_id', school.id).order('name'),
+                supabase.from('fee_structures').select('*, fee_categories(name), grade_levels(name), academic_years(name), terms(name), classes(name)').eq('school_id', school.id),
+                supabase.from('fee_ledger').select('*, students(first_name, last_name, admission_number)').eq('school_id', school.id).order('created_at', { ascending: false }).limit(200),
+                supabase.from('students').select('*').eq('school_id', school.id).eq('status', 'active'),
+                supabase.from('grade_levels').select('*').eq('school_id', school.id).order('level_order'),
+                supabase.from('academic_years').select('*').eq('school_id', school.id).order('start_date', { ascending: false }),
+                supabase.from('terms').select('*').eq('school_id', school.id).order('term_number'),
+            ]);
+            if (fcRes.error) throw fcRes.error;
+            if (fsRes.error) throw fsRes.error;
+            if (ledRes.error) throw ledRes.error;
+            if (stuRes.error) throw stuRes.error;
+            if (glRes.error) throw glRes.error;
+            if (ayRes.error) throw ayRes.error;
+            if (tRes.error) throw tRes.error;
+            
+            setFeeCategories(fcRes.data || []);
+            setFeeStructures(fsRes.data || []);
+            setLedgerEntries(ledRes.data || []);
+            setStudents(stuRes.data || []);
+            setGradeLevels(glRes.data || []);
+            setAcademicYears(ayRes.data || []);
+            setTerms(tRes.data || []);
+        } catch (err: any) {
+            console.error('Finance fetch error:', err);
+            toast.error('Failed to load finance data: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => { fetchAll(); }, [school?.id]);
 
-    const totalCollected = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-    const totalInvoiced = invoices.reduce((sum, i) => sum + Number(i.total_amount || 0), 0);
-    const totalOutstanding = invoices.reduce((sum, i) => sum + Number(i.balance || 0), 0);
+    const totalCollected = ledgerEntries.filter(e => e.transaction_type === 'payment').reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const totalOutstanding = students.reduce((sum, s) => sum + Number(s.fee_balance || 0), 0);
+    const totalCharged = ledgerEntries.filter(e => e.transaction_type === 'charge').reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
     const handleCreateCategory = async () => {
         if (!categoryForm.name.trim()) { toast.error('Enter category name'); return; }
@@ -76,24 +89,68 @@ export default function FinancePage() {
     const handleCreateFee = async () => {
         if (!feeForm.academic_year_id || !feeForm.fee_category_id || !feeForm.amount) { toast.error('Fill all required fields'); return; }
         if (feeForm.target_type === 'grade' && !feeForm.grade_level_id) { toast.error('Select a grade level'); return; }
+        if (feeForm.target_type === 'class' && !feeForm.class_id) { toast.error('Select a class'); return; }
         if (feeForm.target_type === 'individual' && !feeForm.student_id) { toast.error('Select a student'); return; }
 
         setSaving(true);
-        const { error } = await supabase.from('fee_structures').insert({
-            school_id: school!.id,
-            grade_level_id: feeForm.target_type === 'grade' ? feeForm.grade_level_id : null,
-            student_id: feeForm.target_type === 'individual' ? feeForm.student_id : null,
-            academic_year_id: feeForm.academic_year_id,
-            term_id: feeForm.term_id || null,
-            fee_category_id: feeForm.fee_category_id,
-            amount: parseFloat(feeForm.amount),
-            is_optional: feeForm.is_optional,
-        });
-        if (error) toast.error(error.message);
-        else {
+        try {
+            const { error } = await supabase.from('fee_structures').insert({
+                school_id: school!.id,
+                grade_level_id: feeForm.target_type === 'grade' ? feeForm.grade_level_id : null,
+                class_id: feeForm.target_type === 'class' ? feeForm.class_id : null,
+                student_id: feeForm.target_type === 'individual' ? feeForm.student_id : null,
+                academic_year_id: feeForm.academic_year_id,
+                term_id: feeForm.term_id || null,
+                fee_category_id: feeForm.fee_category_id,
+                amount: parseFloat(feeForm.amount),
+                is_optional: feeForm.is_optional,
+            });
+            if (error) throw error;
             toast.success('Fee added');
             setShowFeeModal(false);
-            setFeeForm({ target_type: 'grade', grade_level_id: '', student_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
+            setFeeForm({ target_type: 'grade', grade_level_id: '', student_id: '', class_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
+            await fetchAll();
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to add fee');
+        }
+        setSaving(false);
+    };
+
+    const handleSaveTransaction = async () => {
+        if (!transactionForm.student_id || !transactionForm.amount) { toast.error('Fill required fields'); return; }
+        setSaving(true);
+        const amountNum = parseFloat(transactionForm.amount);
+
+        const targetStudent = students.find(s => s.id === transactionForm.student_id);
+        const currentBalance = Number(targetStudent?.fee_balance || 0);
+
+        const newBalance = transactionForm.transaction_type === 'payment'
+            ? currentBalance - amountNum
+            : currentBalance + amountNum;
+
+        const { error: ledgerError } = await supabase.from('fee_ledger').insert({
+            school_id: school!.id,
+            student_id: transactionForm.student_id,
+            amount: amountNum,
+            transaction_type: transactionForm.transaction_type,
+            description: transactionForm.description,
+            payment_method: transactionForm.payment_method || null,
+            reference_number: transactionForm.reference_number || null,
+            recorded_by: (await supabase.auth.getUser()).data.user?.id
+        });
+
+        if (ledgerError) { toast.error(ledgerError.message); setSaving(false); return; }
+
+        const { error: studentError } = await supabase.from('students').update({
+            fee_balance: newBalance,
+            fee_balance_updated_at: new Date().toISOString()
+        }).eq('id', transactionForm.student_id);
+
+        if (studentError) { toast.error(studentError.message); }
+        else {
+            toast.success('Transaction recorded successfully');
+            setShowTransactionModal(false);
+            setTransactionForm({ ...transactionForm, amount: '', description: '', reference_number: '' });
             await fetchAll();
         }
         setSaving(false);
@@ -101,20 +158,34 @@ export default function FinancePage() {
 
     const renderDashboard = () => (
         <>
-            <div className="grid-4 mb-6">
-                <div className="stat-card"><div className="stat-icon green"><DollarSign size={22} /></div><div className="stat-info"><h3>Total Invoiced</h3><div className="stat-value">KES {totalInvoiced.toLocaleString()}</div></div></div>
+            <div className="grid-3 mb-6">
                 <div className="stat-card"><div className="stat-icon blue"><CreditCard size={22} /></div><div className="stat-info"><h3>Total Collected</h3><div className="stat-value">KES {totalCollected.toLocaleString()}</div></div></div>
-                <div className="stat-card"><div className="stat-icon orange"><BarChart3 size={22} /></div><div className="stat-info"><h3>Outstanding</h3><div className="stat-value">KES {totalOutstanding.toLocaleString()}</div></div></div>
-                <div className="stat-card"><div className="stat-icon green"><Users size={22} /></div><div className="stat-info"><h3>Active Students</h3><div className="stat-value">{students.length}</div></div></div>
+                <div className="stat-card"><div className="stat-icon red"><DollarSign size={22} /></div><div className="stat-info"><h3>Total Charged</h3><div className="stat-value">KES {totalCharged.toLocaleString()}</div></div></div>
+                <div className="stat-card"><div className="stat-icon orange"><BarChart3 size={22} /></div><div className="stat-info"><h3>Students Balances</h3><div className="stat-value">KES {totalOutstanding.toLocaleString()}</div></div></div>
             </div>
+
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="card-title">Recent Ledger Entries</h3>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowTransactionModal(true)}>
+                    <Plus size={16} /> Record Transaction
+                </button>
+            </div>
+
             <div className="card">
-                <div className="card-header"><h3 className="card-title">Recent Payments</h3></div>
-                {payments.length === 0 ? (
-                    <div className="empty-state"><h3>No payments recorded</h3><p>Payments will appear here once fees are collected.</p></div>
+                {ledgerEntries.length === 0 ? (
+                    <div className="empty-state"><h3>No financial transactions recorded</h3><p>Payments and fees charges will appear here.</p></div>
                 ) : (
-                    <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>Student</th><th>Amount</th><th>Method</th><th>Date</th><th>Reference</th></tr></thead><tbody>
-                        {payments.slice(0, 15).map((p, i) => (
-                            <tr key={p.id}><td>{i + 1}</td><td><strong>{p.students?.first_name} {p.students?.last_name}</strong></td><td>KES {Number(p.amount).toLocaleString()}</td><td><span className="badge badge-blue">{p.payment_method || '—'}</span></td><td>{p.payment_date}</td><td>{p.reference_number || '—'}</td></tr>
+                    <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>Date</th><th>Type</th><th>Student</th><th>Amount</th><th>Method</th><th>Ref</th></tr></thead><tbody>
+                        {ledgerEntries.slice(0, 15).map((e, i) => (
+                            <tr key={e.id}>
+                                <td>{i + 1}</td>
+                                <td>{new Date(e.created_at).toLocaleDateString()}</td>
+                                <td><span className={`badge ${e.transaction_type === 'payment' ? 'badge-green' : 'badge-red'}`}>{e.transaction_type}</span></td>
+                                <td><strong>{e.students?.first_name} {e.students?.last_name}</strong> {e.students?.admission_number && `(${e.students.admission_number})`}</td>
+                                <td>KES {Number(e.amount).toLocaleString()}</td>
+                                <td>{e.payment_method || '—'}</td>
+                                <td>{e.reference_number || '—'}</td>
+                            </tr>
                         ))}
                     </tbody></table></div>
                 )}
@@ -164,13 +235,26 @@ export default function FinancePage() {
 
     const renderPayments = () => (
         <div className="card">
-            <div className="card-header"><h3 className="card-title">All Payments</h3></div>
-            {payments.length === 0 ? (
-                <div className="empty-state"><h3>No payments yet</h3><p>Record payments against student invoices.</p></div>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="card-title">All Ledger Transactions</h3>
+                <button className="btn btn-primary btn-sm" onClick={() => setShowTransactionModal(true)}>
+                    <Plus size={16} /> Record Transaction
+                </button>
+            </div>
+            {ledgerEntries.length === 0 ? (
+                <div className="empty-state"><h3>No transactions yet</h3><p>Record payments or fee charges to see them here.</p></div>
             ) : (
-                <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>Student</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Date</th><th>Ref</th></tr></thead><tbody>
-                    {payments.map((p, i) => (
-                        <tr key={p.id}><td>{i + 1}</td><td><strong>{p.students?.first_name} {p.students?.last_name}</strong></td><td>{p.invoices?.invoice_number || '—'}</td><td>KES {Number(p.amount).toLocaleString()}</td><td><span className="badge badge-blue">{p.payment_method || '—'}</span></td><td>{p.payment_date}</td><td>{p.reference_number || '—'}</td></tr>
+                <div className="table-wrapper"><table className="data-table"><thead><tr><th>Date</th><th>Student</th><th>Type</th><th>Description</th><th>Amount</th><th>Method</th><th>Ref</th></tr></thead><tbody>
+                    {ledgerEntries.map(e => (
+                        <tr key={e.id}>
+                            <td>{new Date(e.created_at).toLocaleDateString()}</td>
+                            <td><strong>{e.students?.first_name} {e.students?.last_name}</strong></td>
+                            <td><span className={`badge ${e.transaction_type === 'payment' ? 'badge-green' : 'badge-red'}`}>{e.transaction_type}</span></td>
+                            <td>{e.description || '—'}</td>
+                            <td>KES {Number(e.amount).toLocaleString()}</td>
+                            <td>{e.payment_method || '—'}</td>
+                            <td>{e.reference_number || '—'}</td>
+                        </tr>
                     ))}
                 </tbody></table></div>
             )}
@@ -268,6 +352,54 @@ export default function FinancePage() {
                             <p className="form-hint">When fee is added, all students in the selected grade level will have their balance updated accordingly.</p>
                         </div>
                         <div className="modal-footer"><button className="btn btn-secondary" onClick={() => setShowFeeModal(false)}>Cancel</button><button className="btn btn-primary" onClick={handleCreateFee} disabled={saving}>{saving ? <span className="spinner" /> : 'Add Fee'}</button></div>
+                    </div>
+                </div>
+            )}
+
+            {/* Transaction Modal */}
+            {showTransactionModal && (
+                <div className="modal-overlay" onClick={() => setShowTransactionModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+                        <div className="modal-header"><h3 className="modal-title">💸 Record Transaction</h3><button className="modal-close" onClick={() => setShowTransactionModal(false)}><X size={18} /></button></div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Student *</label>
+                                <select className="form-select" value={transactionForm.student_id} onChange={e => setTransactionForm(p => ({ ...p, student_id: e.target.value }))}>
+                                    <option value="">Select Student...</option>
+                                    {students.map(s => (
+                                        <option key={s.id} value={s.id}>{s.first_name} {s.last_name} {s.admission_number ? `(${s.admission_number})` : ''}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid-2">
+                                <div className="form-group">
+                                    <label className="form-label">Transaction Type *</label>
+                                    <select className="form-select" value={transactionForm.transaction_type} onChange={e => setTransactionForm(p => ({ ...p, transaction_type: e.target.value }))}>
+                                        <option value="payment">💳 Received Payment</option>
+                                        <option value="charge">🧾 Add Fee/Charge</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Amount (KES) *</label>
+                                    <input className="form-input" type="number" placeholder="0.00" value={transactionForm.amount} onChange={e => setTransactionForm(p => ({ ...p, amount: e.target.value }))} />
+                                </div>
+                            </div>
+                            <div className="grid-2">
+                                <div className="form-group">
+                                    <label className="form-label">Payment Method</label>
+                                    <input className="form-input" placeholder="M-Pesa, Cash, Bank..." value={transactionForm.payment_method} onChange={e => setTransactionForm(p => ({ ...p, payment_method: e.target.value }))} />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Reference No.</label>
+                                    <input className="form-input" placeholder="e.g TXN12345" value={transactionForm.reference_number} onChange={e => setTransactionForm(p => ({ ...p, reference_number: e.target.value }))} />
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Description / Remarks</label>
+                                <input className="form-input" placeholder="e.g. Tuition fee part payment" value={transactionForm.description} onChange={e => setTransactionForm(p => ({ ...p, description: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div className="modal-footer"><button className="btn btn-secondary" onClick={() => setShowTransactionModal(false)}>Cancel</button><button className="btn btn-primary" onClick={handleSaveTransaction} disabled={saving}>{saving ? <span className="spinner" /> : 'Save Transaction'}</button></div>
                     </div>
                 </div>
             )}

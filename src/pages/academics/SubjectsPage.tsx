@@ -3,7 +3,8 @@ import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { Plus, Trash2, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, X, Download } from 'lucide-react';
+import { createPdfWithHeader, addTableToPdf, downloadPdf } from '../../lib/pdf';
 
 export default function SubjectsPage() {
     const { school } = useAuth();
@@ -82,6 +83,33 @@ export default function SubjectsPage() {
         }
     };
 
+    const handleDownload = async () => {
+        if (!subjects.length) {
+            toast.error('No subjects to download');
+            return;
+        }
+
+        const doc = await createPdfWithHeader({
+            title: 'School Subjects List',
+            subtitle: `${subjects.length} subjects found`,
+            schoolName: school?.name || 'School Name',
+            schoolMotto: school?.motto || '',
+            logoUrl: school?.logo_url || '',
+        });
+
+        const headers = ['Subject Name', 'Code', 'Department', 'Lessons/Week', 'Compulsory'];
+        const rows = subjects.map(s => [
+            s.name,
+            s.code || '—',
+            s.departments?.name || s.category || '—',
+            String(s.lessons_per_week || 5),
+            s.is_compulsory ? 'Yes' : 'No'
+        ]);
+
+        addTableToPdf(doc, headers, rows);
+        downloadPdf(doc, `subjects_${Date.now()}`);
+    };
+
     return (
         <>
             <div className="page-header">
@@ -89,9 +117,14 @@ export default function SubjectsPage() {
                     <h1 className="page-title">Subjects</h1>
                     <p className="page-subtitle">Define subjects after creating departments/categories.</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => openModal()} disabled={departments.length === 0}>
-                    <Plus size={18} /> New Subject
-                </button>
+                <div className="flex gap-2">
+                    <button className="btn btn-download" onClick={handleDownload} disabled={subjects.length === 0}>
+                        <Download size={18} /> Download
+                    </button>
+                    <button className="btn btn-primary" onClick={() => openModal()} disabled={departments.length === 0}>
+                        <Plus size={18} /> New Subject
+                    </button>
+                </div>
             </div>
 
             {departments.length === 0 && !loading && (

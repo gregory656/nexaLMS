@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { GraduationCap, Search } from 'lucide-react';
+import { GraduationCap, Search, Download } from 'lucide-react';
+import { createPdfWithHeader, addTableToPdf, downloadPdf } from '../../lib/pdf';
 
 export default function AlumniPage() {
     const { school } = useAuth();
@@ -35,6 +36,30 @@ export default function AlumniPage() {
         return matchesYear && matchesSearch;
     }), [alumni, selectedYear, searchTerm]);
 
+    const handleDownload = async () => {
+        if (!filtered.length) {
+            toast.error('No alumni records to download');
+            return;
+        }
+        const doc = await createPdfWithHeader({
+            title: 'Alumni List',
+            subtitle: `${filtered.length} records found`,
+            schoolName: school?.name || 'School Name',
+            schoolMotto: school?.motto || '',
+            logoUrl: school?.logo_url || '',
+        });
+        const headers = ['Name', 'Adm No.', 'Final Class', 'Academic Year', 'Guardian'];
+        const rows = filtered.map(r => [
+            `${r.first_name} ${r.last_name}`,
+            r.admission_number || '—',
+            r.final_class_name || '—',
+            r.academic_years?.name || '—',
+            r.guardians ? `${r.guardians.first_name} ${r.guardians.last_name}` : '—'
+        ]);
+        addTableToPdf(doc, headers, rows);
+        downloadPdf(doc, `alumni_list_${Date.now()}`);
+    };
+
     return (
         <>
             <div className="page-header">
@@ -42,11 +67,20 @@ export default function AlumniPage() {
                     <h1 className="page-title">Alumni</h1>
                     <p className="page-subtitle">Graduated learners are archived here by academic year and final class.</p>
                 </div>
-                <div className="stat-card alumni-count">
-                    <GraduationCap size={24} />
-                    <div>
-                        <div className="text-xs text-muted">Displayed Alumni</div>
-                        <strong>{filtered.length}</strong>
+                <div className="flex items-center gap-4">
+                    <div className="stat-card alumni-count cursor-pointer" onClick={handleDownload} title="Download Alumni List">
+                        <Download size={24} />
+                        <div>
+                            <div className="text-xs text-muted">Download</div>
+                            <strong>PDF</strong>
+                        </div>
+                    </div>
+                    <div className="stat-card alumni-count">
+                        <GraduationCap size={24} />
+                        <div>
+                            <div className="text-xs text-muted">Displayed Alumni</div>
+                            <strong>{filtered.length}</strong>
+                        </div>
                     </div>
                 </div>
             </div>

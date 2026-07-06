@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Download } from 'lucide-react';
+import { createPdfWithHeader, addTableToPdf, downloadPdf } from '../../lib/pdf';
 
 export default function DutyRosterPage() {
     const { school } = useAuth();
@@ -100,6 +101,29 @@ export default function DutyRosterPage() {
         setSaving(false);
     };
 
+    const handleDownloadRoster = async (roster: any) => {
+        const doc = await createPdfWithHeader({
+            title: 'Duty Roster',
+            subtitle: roster.name,
+            schoolName: school?.name || 'School Name',
+            schoolMotto: school?.motto || '',
+            logoUrl: school?.logo_url || '',
+        });
+
+        const headers = ['Week', 'Dates', 'Teacher on Duty', 'Prefect in Charge'];
+        const rows = (roster.duty_roster_weeks || [])
+            .sort((a: any, b: any) => a.week_number - b.week_number)
+            .map((w: any) => [
+                `Week ${w.week_number}`,
+                `${w.start_date} - ${w.end_date}`,
+                `${w.teachers?.first_name || ''} ${w.teachers?.last_name || ''}`,
+                w.student_leaders?.students ? `${w.student_leaders.students.first_name} ${w.student_leaders.students.last_name}` : '—'
+            ]);
+
+        addTableToPdf(doc, headers, rows);
+        downloadPdf(doc, `duty_roster_${roster.name.replace(/\s+/g, '_')}_${Date.now()}`);
+    };
+
     return (
         <>
             <div className="page-header">
@@ -153,7 +177,7 @@ export default function DutyRosterPage() {
                                         <h3 className="font-bold text-lg">{roster.name}</h3>
                                         <p className="text-sm text-gray-500">Created: {new Date(roster.created_at).toLocaleDateString()}</p>
                                     </div>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => toast.success("Download started (PDF ready)")}>
+                                    <button className="btn btn-download btn-sm" onClick={() => handleDownloadRoster(roster)}>
                                         <Download size={16} /> Download PDF
                                     </button>
                                 </div>
