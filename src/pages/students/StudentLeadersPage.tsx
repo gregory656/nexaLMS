@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
-import { Trash2 } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
+import { addTableToPdf, createPdfWithHeader, downloadCsv, downloadPdf } from '../../lib/pdf';
 
 export default function StudentLeadersPage() {
     const { school } = useAuth();
@@ -67,6 +68,42 @@ export default function StudentLeadersPage() {
         else fetchAll();
     };
 
+    const leaderRows = leaders.map((leader, index) => [
+        String(index + 1),
+        `${leader.students?.first_name || ''} ${leader.students?.last_name || ''}`.trim(),
+        leader.students?.admission_number || '',
+        leader.role || '',
+        leader.academic_years?.name || '',
+    ]);
+
+    const handleDownloadCsv = () => {
+        if (leaders.length === 0) {
+            toast.error('No student leaders to download');
+            return;
+        }
+        downloadCsv(['#', 'Student', 'Adm No.', 'Role', 'Academic Year'], leaderRows, `student_leaders_${Date.now()}`);
+        toast.success('Student leaders CSV downloaded');
+    };
+
+    const handleDownloadPdf = async () => {
+        if (leaders.length === 0) {
+            toast.error('No student leaders to download');
+            return;
+        }
+
+        const doc = await createPdfWithHeader({
+            title: 'Student Leaders',
+            subtitle: `Total: ${leaders.length} leaders`,
+            schoolName: school?.name || 'School',
+            schoolMotto: school?.motto,
+            logoUrl: school?.logo_url,
+            watermarkUrl: school?.watermark_url,
+        });
+        addTableToPdf(doc, ['#', 'Student', 'Adm No.', 'Role', 'Academic Year'], leaderRows);
+        downloadPdf(doc, `student_leaders_${Date.now()}`);
+        toast.success('Student leaders PDF downloaded');
+    };
+
     return (
         <>
             <div className="page-header">
@@ -114,6 +151,14 @@ export default function StudentLeadersPage() {
                     <div className="card">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="card-title text-lg font-bold">Appointed Leaders</h3>
+                            <div className="flex gap-2">
+                                <button className="btn btn-secondary btn-sm" onClick={handleDownloadCsv} disabled={leaders.length === 0}>
+                                    <Download size={16} /> CSV
+                                </button>
+                                <button className="btn btn-download btn-sm" onClick={handleDownloadPdf} disabled={leaders.length === 0}>
+                                    <Download size={16} /> PDF
+                                </button>
+                            </div>
                         </div>
 
                         {leaders.length === 0 ? (

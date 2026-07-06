@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import {
     LayoutDashboard, DollarSign, CreditCard, BarChart3,
-    Plus, X, Download
+    Plus, X, Download, Search
 } from 'lucide-react';
 
 const TABS = [
@@ -23,6 +23,7 @@ export default function FinancePage() {
     const [feeStructures, setFeeStructures] = useState<any[]>([]);
     const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
     const [students, setStudents] = useState<any[]>([]);
+    const [classes, setClasses] = useState<any[]>([]);
     const [gradeLevels, setGradeLevels] = useState<any[]>([]);
     const [academicYears, setAcademicYears] = useState<any[]>([]);
     const [terms, setTerms] = useState<any[]>([]);
@@ -34,17 +35,20 @@ export default function FinancePage() {
     const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
     const [feeForm, setFeeForm] = useState({ target_type: 'grade', grade_level_id: '', student_id: '', class_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
     const [transactionForm, setTransactionForm] = useState({ student_id: '', transaction_type: 'payment', amount: '', description: '', payment_method: 'mpesa', reference_number: '' });
+    const [feeStudentSearch, setFeeStudentSearch] = useState('');
+    const [transactionStudentSearch, setTransactionStudentSearch] = useState('');
     const [saving, setSaving] = useState(false);
 
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
         try {
-            const [fcRes, fsRes, ledRes, stuRes, glRes, ayRes, tRes] = await Promise.all([
+            const [fcRes, fsRes, ledRes, stuRes, clRes, glRes, ayRes, tRes] = await Promise.all([
                 supabase.from('fee_categories').select('*').eq('school_id', school.id).order('name'),
-                supabase.from('fee_structures').select('*, fee_categories(name), grade_levels(name), academic_years(name), terms(name), classes(name)').eq('school_id', school.id),
+                supabase.from('fee_structures').select('*, fee_categories(name), grade_levels(name), academic_years(name), terms(name), classes(name), students(first_name, last_name, admission_number)').eq('school_id', school.id),
                 supabase.from('fee_ledger').select('*, students(first_name, last_name, admission_number)').eq('school_id', school.id).order('created_at', { ascending: false }).limit(200),
-                supabase.from('students').select('*').eq('school_id', school.id).eq('status', 'active'),
+                supabase.from('students').select('*, classes(name, grade_level_id)').eq('school_id', school.id).eq('status', 'active').order('first_name'),
+                supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
                 supabase.from('grade_levels').select('*').eq('school_id', school.id).order('level_order'),
                 supabase.from('academic_years').select('*').eq('school_id', school.id).order('start_date', { ascending: false }),
                 supabase.from('terms').select('*').eq('school_id', school.id).order('term_number'),
@@ -53,6 +57,7 @@ export default function FinancePage() {
             if (fsRes.error) throw fsRes.error;
             if (ledRes.error) throw ledRes.error;
             if (stuRes.error) throw stuRes.error;
+            if (clRes.error) throw clRes.error;
             if (glRes.error) throw glRes.error;
             if (ayRes.error) throw ayRes.error;
             if (tRes.error) throw tRes.error;
@@ -61,6 +66,7 @@ export default function FinancePage() {
             setFeeStructures(fsRes.data || []);
             setLedgerEntries(ledRes.data || []);
             setStudents(stuRes.data || []);
+            setClasses(clRes.data || []);
             setGradeLevels(glRes.data || []);
             setAcademicYears(ayRes.data || []);
             setTerms(tRes.data || []);
@@ -77,6 +83,44 @@ export default function FinancePage() {
     const totalCollected = ledgerEntries.filter(e => e.transaction_type === 'payment').reduce((sum, p) => sum + Number(p.amount || 0), 0);
     const totalOutstanding = students.reduce((sum, s) => sum + Number(s.fee_balance || 0), 0);
     const totalCharged = ledgerEntries.filter(e => e.transaction_type === 'charge').reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const filterStudents = (query: string) => {
+        const normalized = query.trim().toLowerCase();
+        if (!normalized) return students;
+        return students.filter(student => {
+            const fullName = `${student.first_name || ''} ${student.last_name || ''}`.toLowerCase();
+            const admission = String(student.admission_number || '').toLowerCase();
+            const className = String(student.classes?.name || '').toLowerCase();
+            return fullName.includes(normalized) || admission.includes(normalized) || className.includes(normalized);
+        });
+    };
+
+    const feeStudentOptions = filterStudents(feeStudentSearch);
+    const transactionStudentOptions = filterStudents(transactionStudentSearch);
+
+    const getFeeTargetLabel = (feeStructure: any) => {
+        if (feeStructure.grade_levels?.name) return `Grade: ${feeStructure.grade_levels.name}`;
+        if (feeStructure.classes?.name) return `Class: ${feeStructure.classes.name}`;
+        if (feeStructure.students) {
+            const studentName = `${feeStructure.students.first_name || ''} ${feeStructure.students.last_name || ''}`.trim();
+            return `Student: ${studentName}${feeStructure.students.admission_number ? ` (${feeStructure.students.admission_number})` : ''}`;
+        }
+        return 'All Students';
+    };
+
+    const getStudentsForFeeTarget = () => {
+        if (feeForm.target_type === 'all') return students;
+        if (feeForm.target_type === 'grade') {
+            return students.filter(student => student.classes?.grade_level_id === feeForm.grade_level_id);
+        }
+        if (feeForm.target_type === 'class') {
+            return students.filter(student => student.class_id === feeForm.class_id);
+        }
+        if (feeForm.target_type === 'individual') {
+            return students.filter(student => student.id === feeForm.student_id);
+        }
+        return [];
+    };
 
     const handleCreateCategory = async () => {
         if (!categoryForm.name.trim()) { toast.error('Enter category name'); return; }
@@ -106,9 +150,46 @@ export default function FinancePage() {
                 is_optional: feeForm.is_optional,
             });
             if (error) throw error;
-            toast.success('Fee added');
+
+            const chargeTargets = feeForm.is_optional ? [] : getStudentsForFeeTarget();
+            if (!feeForm.is_optional && chargeTargets.length === 0) {
+                toast.error('Fee structure saved, but no students matched this target for balance charging');
+            }
+
+            if (chargeTargets.length > 0) {
+                const categoryName = feeCategories.find(category => category.id === feeForm.fee_category_id)?.name || 'Fee';
+                const amount = parseFloat(feeForm.amount);
+                const { data: userData } = await supabase.auth.getUser();
+                const ledgerRows = chargeTargets.map(student => ({
+                    school_id: school!.id,
+                    student_id: student.id,
+                    amount,
+                    transaction_type: 'charge',
+                    description: `${categoryName} fee charge`,
+                    payment_method: null,
+                    reference_number: null,
+                    recorded_by: userData.user?.id
+                }));
+                const { error: ledgerError } = await supabase.from('fee_ledger').insert(ledgerRows);
+                if (ledgerError) throw ledgerError;
+
+                const balanceResults = await Promise.all(chargeTargets.map(student => (
+                    supabase
+                        .from('students')
+                        .update({
+                            fee_balance: Number(student.fee_balance || 0) + amount,
+                            fee_balance_updated_at: new Date().toISOString()
+                        })
+                        .eq('id', student.id)
+                )));
+                const balanceError = balanceResults.find(result => result.error)?.error;
+                if (balanceError) throw balanceError;
+            }
+
+            toast.success(feeForm.is_optional ? 'Optional fee added' : `Fee added and charged to ${chargeTargets.length} student${chargeTargets.length === 1 ? '' : 's'}`);
             setShowFeeModal(false);
             setFeeForm({ target_type: 'grade', grade_level_id: '', student_id: '', class_id: '', academic_year_id: '', term_id: '', fee_category_id: '', amount: '', is_optional: false });
+            setFeeStudentSearch('');
             await fetchAll();
         } catch (err: any) {
             toast.error(err.message || 'Failed to add fee');
@@ -151,6 +232,7 @@ export default function FinancePage() {
             toast.success('Transaction recorded successfully');
             setShowTransactionModal(false);
             setTransactionForm({ ...transactionForm, amount: '', description: '', reference_number: '' });
+            setTransactionStudentSearch('');
             await fetchAll();
         }
         setSaving(false);
@@ -224,7 +306,7 @@ export default function FinancePage() {
                     <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>Category</th><th>Target</th><th>Year</th><th>Term</th><th>Amount</th><th>Optional?</th></tr></thead><tbody>
                         {feeStructures.map((fs, i) => (
                             <tr key={fs.id}><td>{i + 1}</td><td><strong>{fs.fee_categories?.name}</strong></td>
-                                <td>{fs.grade_levels?.name || fs.students ? `Student: ${fs.students.first_name}` : 'All Students'}</td>
+                                <td>{getFeeTargetLabel(fs)}</td>
                                 <td>{fs.academic_years?.name || '—'}</td><td>{fs.terms?.name || 'All'}</td><td>KES {Number(fs.amount).toLocaleString()}</td><td>{fs.is_optional ? <span className="badge badge-orange">Optional</span> : <span className="badge badge-green">Required</span>}</td></tr>
                         ))}
                     </tbody></table></div>
@@ -324,8 +406,12 @@ export default function FinancePage() {
                             <div className="form-group"><label className="form-label">Category *</label><select className="form-select" value={feeForm.fee_category_id} onChange={e => setFeeForm(p => ({ ...p, fee_category_id: e.target.value }))}><option value="">Select</option>{feeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
                             <div className="grid-2">
                                 <div className="form-group"><label className="form-label">Target *</label>
-                                    <select className="form-select" value={feeForm.target_type} onChange={e => setFeeForm(p => ({ ...p, target_type: e.target.value }))}>
+                                    <select className="form-select" value={feeForm.target_type} onChange={e => {
+                                        setFeeForm(p => ({ ...p, target_type: e.target.value, grade_level_id: '', class_id: '', student_id: '' }));
+                                        setFeeStudentSearch('');
+                                    }}>
                                         <option value="grade">Specific Grade Level</option>
+                                        <option value="class">Specific Class</option>
                                         <option value="all">All Students</option>
                                         <option value="individual">Individual Student</option>
                                     </select>
@@ -333,8 +419,21 @@ export default function FinancePage() {
                                 {feeForm.target_type === 'grade' && (
                                     <div className="form-group"><label className="form-label">Grade Level *</label><select className="form-select" value={feeForm.grade_level_id} onChange={e => setFeeForm(p => ({ ...p, grade_level_id: e.target.value }))}><option value="">Select Grade</option>{gradeLevels.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></div>
                                 )}
+                                {feeForm.target_type === 'class' && (
+                                    <div className="form-group"><label className="form-label">Class *</label><select className="form-select" value={feeForm.class_id} onChange={e => setFeeForm(p => ({ ...p, class_id: e.target.value }))}><option value="">Select Class</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                                )}
                                 {feeForm.target_type === 'individual' && (
-                                    <div className="form-group"><label className="form-label">Student *</label><select className="form-select" value={feeForm.student_id} onChange={e => setFeeForm(p => ({ ...p, student_id: e.target.value }))}><option value="">Select Student</option>{students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}</select></div>
+                                    <div className="form-group">
+                                        <label className="form-label">Student *</label>
+                                        <div className="form-input-icon mb-2">
+                                            <Search size={18} />
+                                            <input className="form-input" placeholder="Search name, admission no. or class" value={feeStudentSearch} onChange={e => setFeeStudentSearch(e.target.value)} />
+                                        </div>
+                                        <select className="form-select" value={feeForm.student_id} onChange={e => setFeeForm(p => ({ ...p, student_id: e.target.value }))}>
+                                            <option value="">Select Student</option>
+                                            {feeStudentOptions.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name} {s.admission_number ? `(${s.admission_number})` : ''}</option>)}
+                                        </select>
+                                    </div>
                                 )}
                             </div>
                             <div className="grid-2">
@@ -349,7 +448,7 @@ export default function FinancePage() {
                                     </label>
                                 </div>
                             </div>
-                            <p className="form-hint">When fee is added, all students in the selected grade level will have their balance updated accordingly.</p>
+                            <p className="form-hint">Required fees update matching student balances and create charge ledger entries. Optional fees are saved without charging balances.</p>
                         </div>
                         <div className="modal-footer"><button className="btn btn-secondary" onClick={() => setShowFeeModal(false)}>Cancel</button><button className="btn btn-primary" onClick={handleCreateFee} disabled={saving}>{saving ? <span className="spinner" /> : 'Add Fee'}</button></div>
                     </div>
@@ -364,9 +463,13 @@ export default function FinancePage() {
                         <div className="modal-body">
                             <div className="form-group">
                                 <label className="form-label">Student *</label>
+                                <div className="form-input-icon mb-2">
+                                    <Search size={18} />
+                                    <input className="form-input" placeholder="Search name, admission no. or class" value={transactionStudentSearch} onChange={e => setTransactionStudentSearch(e.target.value)} />
+                                </div>
                                 <select className="form-select" value={transactionForm.student_id} onChange={e => setTransactionForm(p => ({ ...p, student_id: e.target.value }))}>
                                     <option value="">Select Student...</option>
-                                    {students.map(s => (
+                                    {transactionStudentOptions.map(s => (
                                         <option key={s.id} value={s.id}>{s.first_name} {s.last_name} {s.admission_number ? `(${s.admission_number})` : ''}</option>
                                     ))}
                                 </select>

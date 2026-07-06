@@ -15,6 +15,22 @@ const TABS = [
     { key: 'reports', label: 'Reports & Analysis', icon: BarChart3 },
 ];
 
+function downloadRowsAsCsv(rows: Record<string, any>[], sheetName: string, fileName: string) {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
 export default function AttendancePage() {
     const { school } = useAuth();
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -315,16 +331,35 @@ export default function AttendancePage() {
             toast.error('Select start and end dates');
             return;
         }
+        if (startDate > endDate) {
+            toast.error('Start date cannot be after end date');
+            return;
+        }
         setDownloading(true);
         try {
             if (downloadScope === 'students') {
+                const { data: sessionData, error: sessionError } = await supabase
+                    .from('attendance_sessions')
+                    .select('id')
+                    .eq('school_id', school!.id)
+                    .gte('date', startDate)
+                    .lte('date', endDate)
+                    .order('date', { ascending: false })
+                    .limit(2000);
+
+                if (sessionError) throw sessionError;
+                const sessionIds = (sessionData || []).map(session => session.id);
+                if (sessionIds.length === 0) {
+                    toast.error('No attendance records found for this date range');
+                    setDownloading(false);
+                    return;
+                }
+
                 const { data, error } = await supabase
                     .from('student_attendance')
                     .select('status, students(first_name, last_name, admission_number), attendance_sessions(date, session_type, classes(name))')
                     .eq('school_id', school!.id)
-                    .gte('attendance_sessions.date', startDate)
-                    .lte('attendance_sessions.date', endDate)
-                    .order('attendance_sessions.date', { ascending: false })
+                    .in('session_id', sessionIds)
                     .limit(2000);
 
                 if (error) throw error;
@@ -334,7 +369,9 @@ export default function AttendancePage() {
                     return;
                 }
 
-                const rows = (data as any[]).map(record => ({
+                const rows = (data as any[])
+                    .sort((a, b) => String(b.attendance_sessions?.date || '').localeCompare(String(a.attendance_sessions?.date || '')))
+                    .map(record => ({
                     StudentName: `${record.students?.first_name} ${record.students?.last_name}`,
                     AdmissionNo: record.students?.admission_number || '',
                     Class: record.attendance_sessions?.classes?.name || '',
@@ -343,28 +380,31 @@ export default function AttendancePage() {
                     Status: record.status
                 }));
 
-                const ws = XLSX.utils.json_to_sheet(rows);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Attendance");
-                const csv = XLSX.utils.sheet_to_csv(ws);
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `student_attendance_${startDate}_to_${endDate}.csv`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                downloadRowsAsCsv(rows, "Attendance", `student_attendance_${startDate}_to_${endDate}.csv`);
                 toast.success('Student attendance exported');
             } else {
+                const { data: sessionData, error: sessionError } = await supabase
+                    .from('teacher_attendance_sessions')
+                    .select('id')
+                    .eq('school_id', school!.id)
+                    .gte('date', startDate)
+                    .lte('date', endDate)
+                    .order('date', { ascending: false })
+                    .limit(2000);
+
+                if (sessionError) throw sessionError;
+                const sessionIds = (sessionData || []).map(session => session.id);
+                if (sessionIds.length === 0) {
+                    toast.error('No teacher attendance records found for this date range');
+                    setDownloading(false);
+                    return;
+                }
+
                 const { data, error } = await supabase
                     .from('teacher_attendance')
                     .select('status, teachers(first_name, last_name), teacher_attendance_sessions(date, session_type)')
                     .eq('school_id', school!.id)
-                    .gte('teacher_attendance_sessions.date', startDate)
-                    .lte('teacher_attendance_sessions.date', endDate)
-                    .order('teacher_attendance_sessions.date', { ascending: false })
+                    .in('session_id', sessionIds)
                     .limit(2000);
 
                 if (error) throw error;
@@ -374,26 +414,16 @@ export default function AttendancePage() {
                     return;
                 }
 
-                const rows = (data as any[]).map(record => ({
+                const rows = (data as any[])
+                    .sort((a, b) => String(b.teacher_attendance_sessions?.date || '').localeCompare(String(a.teacher_attendance_sessions?.date || '')))
+                    .map(record => ({
                     TeacherName: `${record.teachers?.first_name} ${record.teachers?.last_name}`,
                     Date: record.teacher_attendance_sessions?.date || '',
                     Session: record.teacher_attendance_sessions?.session_type || '',
                     Status: record.status
                 }));
 
-                const ws = XLSX.utils.json_to_sheet(rows);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Teacher Attendance");
-                const csv = XLSX.utils.sheet_to_csv(ws);
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `teacher_attendance_${startDate}_to_${endDate}.csv`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                downloadRowsAsCsv(rows, "Teacher Attendance", `teacher_attendance_${startDate}_to_${endDate}.csv`);
                 toast.success('Teacher attendance exported');
             }
         } catch (err: any) {
