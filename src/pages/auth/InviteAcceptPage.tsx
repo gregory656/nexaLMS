@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { ShieldCheck, Lock, CheckCircle, ExternalLink, Download, Book } from 'lucide-react';
+import { ShieldCheck, Lock, CheckCircle, Sparkles } from 'lucide-react';
 import nexagenImage from '../../assets/nexagen.png';
 import toast from 'react-hot-toast';
 import { generateUserManualPdf, downloadPdf } from '../../lib/manualPdf';
+import AuthFooter from '../../components/auth/AuthFooter';
 
 export default function InviteAcceptPage() {
     const [password, setPassword] = useState('');
@@ -44,9 +46,8 @@ export default function InviteAcceptPage() {
                 return;
             }
 
-            // Sign out so they can sign in with new credentials
             await supabase.auth.signOut();
-            toast.success(isRecovery ? 'Password updated successfully!' : 'Account created successfully!');
+            toast.success(isRecovery ? 'Password updated!' : 'Account created!');
             setAccountCreated(true);
         } catch (error: any) {
             toast.error(error.message || "Failed to create account. Please try again.");
@@ -65,58 +66,31 @@ export default function InviteAcceptPage() {
         setDownloadingManual(false);
     };
 
-    // Success screen
     if (accountCreated) {
         return (
             <div className="auth-page">
-                <div className="auth-card" style={{ textAlign: 'center' }}>
+                <div className="auth-card auth-card--centered">
                     <div className="auth-visual">
                         <img src={nexagenImage} alt="" />
-                        <ShieldCheck size={22} />
-                    </div>
-                    <div style={{ margin: '1.5rem 0' }}>
-                        <CheckCircle size={56} style={{ color: 'var(--green-600)', margin: '0 auto 1rem' }} />
-                        <h2 className="auth-title" style={{ color: 'var(--green-700)' }}>
-                            {isRecovery ? 'Password Updated!' : 'Account Created!'}
-                        </h2>
-                        <p className="auth-subtitle" style={{ marginTop: '0.5rem', lineHeight: 1.6 }}>
-                            {isRecovery ? (
-                                <>Your password has been reset successfully.<br />You can now sign in with your new password.</>
-                            ) : (
-                                <>Your account has been created successfully.<br />You can now log in using your email and the password you just set.</>
-                            )}
-                        </p>
+                        <Sparkles size={22} />
                     </div>
 
-                    <a
-                        href="https://nexagen.co.ke"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-primary btn-lg btn-full"
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                    >
-                        <ExternalLink size={18} /> Go to nexagen.co.ke to Login
-                    </a>
-
-                    <p className="text-sm text-center text-muted mt-4">
-                        Or <a href="/auth/login" className="underline font-bold">sign in here</a> if you're already on the platform.
+                    <CheckCircle size={40} className="auth-success-icon" />
+                    <h2 className="auth-title">
+                        {isRecovery ? 'Password updated' : 'All set'}
+                    </h2>
+                    <p className="auth-subtitle">
+                        {isRecovery ? 'Sign in with your new password.' : 'Your account is ready to use.'}
                     </p>
 
-                    <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'linear-gradient(135deg, var(--green-50), var(--white))', borderRadius: '8px' }}>
-                        <div className="flex items-center gap-2 mb-2 justify-center">
-                            <Book size={18} className="text-green-600" />
-                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>User Manual</p>
-                        </div>
-                        <p className="text-sm text-muted mb-3">Download the comprehensive NexaLMS user guide (PDF)</p>
-                        <button
-                            className="btn btn-primary btn-sm btn-full"
-                            onClick={handleDownloadManual}
-                            disabled={downloadingManual}
-                        >
-                            {downloadingManual ? <span className="spinner" /> : <><Download size={16} /> Download Manual</>}
-                        </button>
-                        <p className="text-xs text-muted text-center mt-2">Version 1.0.0 • Jan 7, 2025</p>
-                    </div>
+                    <Link to="/auth/login" className="btn btn-primary btn-lg btn-full">
+                        Sign in
+                    </Link>
+
+                    <AuthFooter
+                        onDownloadManual={handleDownloadManual}
+                        downloadingManual={downloadingManual}
+                    />
                 </div>
             </div>
         );
@@ -129,27 +103,26 @@ export default function InviteAcceptPage() {
                     <img src={nexagenImage} alt="" />
                     <ShieldCheck size={22} />
                 </div>
+
                 <div className="auth-logo">
                     <div className="auth-logo-icon">N</div>
                     <span className="auth-logo-text">NexaLMS</span>
                 </div>
-                <h2 className="auth-title">{isRecovery ? 'Reset Your Password' : 'Create Your Account'}</h2>
-                <p className="auth-subtitle">
-                    {isRecovery
-                        ? 'Choose a new password for your admin account.'
-                        : 'Set a secure password to activate your account.'}
-                </p>
 
-                <form onSubmit={handleCreateAccount} className="mt-4">
+                <h2 className="auth-title">
+                    {isRecovery ? 'New password' : 'Create account'}
+                </h2>
+
+                <form onSubmit={handleCreateAccount}>
                     <div className="form-group">
-                        <label className="form-label" htmlFor="new-password">New Password</label>
+                        <label className="form-label" htmlFor="new-password">Password</label>
                         <div className="form-input-icon">
                             <Lock />
                             <input
                                 id="new-password"
                                 type="password"
                                 className="form-input"
-                                placeholder="Enter strong password"
+                                placeholder="At least 6 characters"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                                 required
@@ -158,7 +131,7 @@ export default function InviteAcceptPage() {
                     </div>
 
                     <div className="form-group">
-                        <label className="form-label" htmlFor="confirm-password">Confirm Password</label>
+                        <label className="form-label" htmlFor="confirm-password">Confirm</label>
                         <div className="form-input-icon">
                             <Lock />
                             <input
@@ -174,29 +147,18 @@ export default function InviteAcceptPage() {
                     </div>
 
                     <button type="submit" className="btn btn-primary btn-lg btn-full mt-4" disabled={submitting}>
-                        {submitting ? <span className="spinner" /> : isRecovery ? 'Update Password' : 'Create Account'}
+                        {submitting ? <span className="spinner" /> : isRecovery ? 'Update password' : 'Create account'}
                     </button>
 
-                    <p className="text-sm text-center text-muted mt-4">
-                        If you reached here by mistake, please <a href="/auth/login" className="underline font-bold">sign in</a>.
+                    <p className="auth-inline-link">
+                        <Link to="/auth/login">Back to sign in</Link>
                     </p>
-
-                    <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'linear-gradient(135deg, var(--green-50), var(--white))', borderRadius: '8px' }}>
-                        <div className="flex items-center gap-2 mb-2">
-                            <Book size={18} className="text-green-600" />
-                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>User Manual</p>
-                        </div>
-                        <p className="text-sm text-muted mb-3">Download the comprehensive NexaLMS user guide (PDF)</p>
-                        <button
-                            className="btn btn-primary btn-sm btn-full"
-                            onClick={handleDownloadManual}
-                            disabled={downloadingManual}
-                        >
-                            {downloadingManual ? <span className="spinner" /> : <><Download size={16} /> Download Manual</>}
-                        </button>
-                        <p className="text-xs text-muted text-center mt-2">Version 1.0.0 • Jan 7, 2025</p>
-                    </div>
                 </form>
+
+                <AuthFooter
+                    onDownloadManual={handleDownloadManual}
+                    downloadingManual={downloadingManual}
+                />
             </div>
         </div>
     );

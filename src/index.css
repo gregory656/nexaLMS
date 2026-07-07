@@ -222,9 +222,9 @@ h4 {
   background: var(--white);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
-  padding: 3rem;
+  padding: 2.25rem 2rem 1.75rem;
   width: 100%;
-  max-width: 440px;
+  max-width: 400px;
   position: relative;
   z-index: 1;
   border: 1px solid var(--gray-100);
@@ -235,11 +235,11 @@ h4 {
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .auth-visual {
-  height: 132px;
+  height: 88px;
   border-radius: var(--radius-lg);
   background:
     linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(59, 130, 246, 0.12)),
@@ -297,15 +297,15 @@ h4 {
 
 .auth-title {
   text-align: center;
-  margin-bottom: 0.5rem;
-  font-size: 1.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 1.35rem;
 }
 
 .auth-subtitle {
   text-align: center;
   color: var(--gray-500);
-  margin-bottom: 2rem;
-  font-size: 0.9rem;
+  margin: -0.75rem 0 1.25rem;
+  font-size: 0.82rem;
 }
 
 /* ============================================
@@ -1912,8 +1912,101 @@ h4 {
 }
 
 /* ============================================
-   Auth Contact Card
+   Auth Footer (compact support + manual link)
    ============================================ */
+.auth-footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gray-100);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.auth-footer-support {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 0.5rem;
+  font-size: 0.7rem;
+  color: var(--gray-400);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.auth-footer-support span {
+  color: var(--gray-400);
+}
+
+.auth-footer-support a {
+  color: var(--gray-500);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.auth-footer-support a:hover {
+  color: var(--green-600);
+}
+
+.auth-footer-link {
+  background: none;
+  border: none;
+  padding: 0.15rem 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--green-600);
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: color 0.15s;
+}
+
+.auth-footer-link:hover:not(:disabled) {
+  color: var(--green-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-footer-link:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.auth-card--centered {
+  text-align: center;
+}
+
+.auth-success-icon {
+  color: var(--green-600);
+  margin: 0.5rem auto 0.25rem;
+}
+
+.auth-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.25rem;
+}
+
+.auth-inline-link {
+  text-align: center;
+  margin: 1rem 0 0;
+  font-size: 0.78rem;
+}
+
+.auth-inline-link a {
+  color: var(--gray-500);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-inline-link a:hover {
+  color: var(--green-600);
+}
+
+/* Legacy — kept for any remaining references */
 .auth-contact-card {
   margin-top: 1.5rem;
   padding: 1rem 1.25rem;
