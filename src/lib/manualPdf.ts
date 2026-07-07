@@ -6,9 +6,10 @@
 import jsPDF from 'jspdf';
 import autoTable, { applyPlugin } from 'jspdf-autotable';
 
-// CRITICAL: Explicitly apply the plugin so production tree-shaking
-// never strips the jsPDF prototype extension (doc.autoTable)
-applyPlugin(jsPDF);
+// CRITICAL: Explicitly register plugin on jsPDF constructor.
+// This ensures the standalone autoTable(doc, opts) fn AND doc.lastAutoTable
+// work correctly even after Vite/Rollup production tree-shaking.
+applyPlugin(jsPDF as any);
 
 // Extend jsPDF with lastAutoTable
 declare module 'jspdf' {
