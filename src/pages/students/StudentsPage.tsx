@@ -7,6 +7,7 @@ import { uploadToCloudinary } from '../../lib/cloudinary';
 import { createPdfWithHeader, addTableToPdf, downloadPdf, downloadCsv } from '../../lib/pdf';
 import { Plus, Search, Filter, MoreVertical, Edit2, Trash2, X, Download, Upload, Camera } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import HelpIcon from '../../components/ui/HelpIcon';
 
 export default function StudentsPage() {
     const { school } = useAuth();
@@ -432,6 +433,7 @@ export default function StudentsPage() {
                     <p className="page-subtitle">{students.length} students enrolled</p>
                 </div>
                 <div className="flex gap-2">
+                    <HelpIcon section="students" />
                     <input
                         type="file"
                         ref={fileInputRef}

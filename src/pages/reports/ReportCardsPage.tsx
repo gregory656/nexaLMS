@@ -6,6 +6,7 @@ import { generateReportCardPdf, downloadPdf } from '../../lib/pdf';
 import {
     FileText, ClipboardList, Download, Eye, ToggleLeft, ToggleRight,
 } from 'lucide-react';
+import HelpIcon from '../../components/ui/HelpIcon';
 
 const TABS = [
     { key: 'generate', label: 'Generate', icon: FileText },
@@ -360,6 +361,7 @@ export default function ReportCardsPage() {
                     <h1 className="page-title">Report Cards</h1>
                     <p className="page-subtitle">Generate, preview, and download student report cards</p>
                 </div>
+                <HelpIcon section="report-cards" />
             </div>
 
             <div className="card mb-4" style={{ padding: '0.5rem 1rem' }}>

@@ -7,6 +7,7 @@ import {
     LayoutDashboard, Settings, FileText, BarChart3, Download,
     Plus, X, Trash2, Shuffle, BookOpen
 } from 'lucide-react';
+import HelpIcon from '../../components/ui/HelpIcon';
 
 const TABS = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -533,6 +534,7 @@ export default function ExamsPage() {
                     <h1 className="page-title">Examinations</h1>
                     <p className="page-subtitle">Manage exams, enter marks, view analytics</p>
                 </div>
+                <HelpIcon section="examinations" />
             </div>
 
             {/* Internal Tab Navigation */}

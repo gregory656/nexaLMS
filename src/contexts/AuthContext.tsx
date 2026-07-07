@@ -206,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!appUser) return { error: { message: 'No admin account exists for that email.' } };
 
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}/auth/login`,
+            redirectTo: `${window.location.origin}/auth/create-account`,
         });
         return { error };
     };

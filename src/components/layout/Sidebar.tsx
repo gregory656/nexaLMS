@@ -1,12 +1,14 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useHelpSidebar } from '../../contexts/HelpContext';
 import {
     LayoutDashboard, Users, GraduationCap, UserCheck,
     BookOpen, Calendar, ClipboardList, DollarSign,
     Settings, Shield, CreditCard,
     School, FileText, Clock, Megaphone,
-    UserCog, BarChart3, LogOut, Home
+    UserCog, BarChart3, LogOut, Home, HelpCircle
 } from 'lucide-react';
+import HelpSidebar from './HelpSidebar';
 
 const navSections = [
     {
@@ -59,15 +61,31 @@ const navSections = [
             { to: '/announcements', icon: Megaphone, label: 'Announcements' },
             { to: '/settings', icon: Settings, label: 'School Settings' },
         ]
+    },
+    {
+        title: 'Support',
+        items: [
+            { to: 'help', icon: HelpCircle, label: 'Help Centre', action: 'open-help' },
+        ]
     }
 ];
 
 export default function Sidebar() {
     const { user, school, signOut } = useAuth();
     const navigate = useNavigate();
+    const { isOpen: helpOpen, initialSection, closeHelp, openHelp } = useHelpSidebar();
+    
     const handleLogout = async () => {
         await signOut();
         navigate('/auth/login');
+    };
+
+    const handleNavClick = (item: any) => {
+        if (item.action === 'open-help') {
+            openHelp();
+        } else {
+            navigate(item.to);
+        }
     };
 
     const initials = user?.full_name
@@ -78,6 +96,7 @@ export default function Sidebar() {
         .slice(0, 2) || 'AD';
 
     return (
+        <>
         <aside className="sidebar">
             <div className="sidebar-logo">
                 {school?.logo_url || school?.watermark_url ? (
@@ -96,16 +115,28 @@ export default function Sidebar() {
                     <div key={section.title} className="sidebar-section">
                         <div className="sidebar-section-title">{section.title}</div>
                         {section.items.map(item => (
-                            <NavLink
-                                key={item.to}
-                                to={item.to}
-                                className={({ isActive }) =>
-                                    `sidebar-item ${isActive ? 'active' : ''}`
-                                }
-                            >
-                                <item.icon />
-                                <span>{item.label}</span>
-                            </NavLink>
+                            item.action === 'open-help' ? (
+                                <button
+                                    key={item.to}
+                                    className="sidebar-item"
+                                    onClick={() => handleNavClick(item)}
+                                    style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+                                >
+                                    <item.icon />
+                                    <span>{item.label}</span>
+                                </button>
+                            ) : (
+                                <NavLink
+                                    key={item.to}
+                                    to={item.to}
+                                    className={({ isActive }) =>
+                                        `sidebar-item ${isActive ? 'active' : ''}`
+                                    }
+                                >
+                                    <item.icon />
+                                    <span>{item.label}</span>
+                                </NavLink>
+                            )
                         ))}
                     </div>
                 ))}
@@ -122,5 +153,8 @@ export default function Sidebar() {
                 </div>
             </div>
         </aside>
+        
+        <HelpSidebar isOpen={helpOpen} onClose={closeHelp} initialSection={initialSection} />
+        </>
     );
 }

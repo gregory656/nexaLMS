@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Mail, Lock, Eye, EyeOff, Sparkles, Phone } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles, Phone, Download, Book } from 'lucide-react';
 import nexagenImage from '../../assets/nexagen.png';
+import { generateUserManualPdf, downloadPdf } from '../../lib/manualPdf';
 
 export default function LoginPage() {
     const { signIn, resetPassword } = useAuth();
@@ -14,6 +15,7 @@ export default function LoginPage() {
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
+    const [downloadingManual, setDownloadingManual] = useState(false);
 
     // Intercept Supabase auth redirect URLs if they land on the login page by mistake.
     useEffect(() => {
@@ -23,6 +25,37 @@ export default function LoginPage() {
         }
     }, [navigate]);
 
+    const sendResetLink = async () => {
+        const trimmedEmail = email.trim();
+        if (!trimmedEmail) {
+            setRecoveryMode(true);
+            setError('');
+            setMessage('');
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        setMessage('');
+
+        const { error: resetError } = await resetPassword(trimmedEmail);
+        if (resetError) setError(resetError.message || 'Could not send password reset link');
+        else setMessage('Password reset link sent. Check that email inbox.');
+
+        setLoading(false);
+    };
+
+    const handleForgotPassword = () => {
+        if (recoveryMode) {
+            setRecoveryMode(false);
+            setError('');
+            setMessage('');
+            return;
+        }
+        void sendResetLink();
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -30,10 +63,7 @@ export default function LoginPage() {
         setLoading(true);
 
         if (recoveryMode) {
-            const { error: resetError } = await resetPassword(email.trim());
-            if (resetError) setError(resetError.message || 'Could not send password reset link');
-            else setMessage('Password reset link sent. Check that email inbox.');
-            setLoading(false);
+            await sendResetLink();
             return;
         }
 
@@ -44,6 +74,17 @@ export default function LoginPage() {
         } else {
             navigate('/dashboard');
         }
+    };
+
+    const handleDownloadManual = async () => {
+        setDownloadingManual(true);
+        try {
+            const doc = await generateUserManualPdf();
+            downloadPdf(doc, `NexaLMS_User_Manual_V1.0.0`);
+        } catch (error) {
+            console.error('Failed to download manual:', error);
+        }
+        setDownloadingManual(false);
     };
 
     return (
@@ -123,11 +164,8 @@ export default function LoginPage() {
                     <button
                         type="button"
                         className="auth-link-button"
-                        onClick={() => {
-                            setRecoveryMode(!recoveryMode);
-                            setError('');
-                            setMessage('');
-                        }}
+                        onClick={handleForgotPassword}
+                        disabled={loading}
                     >
                         {recoveryMode ? 'Back to sign in' : 'Forgot password?'}
                     </button>
@@ -163,6 +201,22 @@ export default function LoginPage() {
                             <span>WhatsApp</span>
                         </a>
                     </div>
+                </div>
+
+                <div className="auth-contact-card" style={{ marginTop: '0.75rem', background: 'linear-gradient(135deg, var(--green-50), var(--white))' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                        <Book size={18} className="text-green-600" />
+                        <p className="auth-contact-label" style={{ margin: 0 }}>User Manual</p>
+                    </div>
+                    <p className="text-sm text-muted mb-3">Download the comprehensive NexaLMS user guide (PDF)</p>
+                    <button
+                        className="btn btn-primary btn-sm btn-full"
+                        onClick={handleDownloadManual}
+                        disabled={downloadingManual}
+                    >
+                        {downloadingManual ? <span className="spinner" /> : <><Download size={16} /> Download Manual</>}
+                    </button>
+                    <p className="text-xs text-muted text-center mt-2">Version 1.0.0 • Jan 7, 2025</p>
                 </div>
             </div>
         </div>

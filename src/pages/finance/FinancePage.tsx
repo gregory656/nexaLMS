@@ -7,6 +7,7 @@ import {
     Plus, X, Download, Search
 } from 'lucide-react';
 import { addTableToPdf, createPdfWithHeader, downloadCsv, downloadPdf } from '../../lib/pdf';
+import HelpIcon from '../../components/ui/HelpIcon';
 
 const TABS = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -590,6 +591,7 @@ export default function FinancePage() {
                     <h1 className="page-title">Fee Management</h1>
                     <p className="page-subtitle">Set up fees, track payments, manage balances</p>
                 </div>
+                <HelpIcon section="finance" />
             </div>
 
             <div className="card mb-4" style={{ padding: '0.5rem 1rem' }}>

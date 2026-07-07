@@ -1,14 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { ShieldCheck, Lock, CheckCircle, ExternalLink } from 'lucide-react';
+import { ShieldCheck, Lock, CheckCircle, ExternalLink, Download, Book } from 'lucide-react';
 import nexagenImage from '../../assets/nexagen.png';
 import toast from 'react-hot-toast';
+import { generateUserManualPdf, downloadPdf } from '../../lib/manualPdf';
 
 export default function InviteAcceptPage() {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [accountCreated, setAccountCreated] = useState(false);
+    const [downloadingManual, setDownloadingManual] = useState(false);
+    const [isRecovery, setIsRecovery] = useState(false);
+
+    useEffect(() => {
+        const hash = window.location.hash;
+        if (hash.includes('type=recovery')) {
+            setIsRecovery(true);
+        }
+    }, []);
 
     const handleCreateAccount = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -36,12 +46,23 @@ export default function InviteAcceptPage() {
 
             // Sign out so they can sign in with new credentials
             await supabase.auth.signOut();
-            toast.success("Account created successfully!");
+            toast.success(isRecovery ? 'Password updated successfully!' : 'Account created successfully!');
             setAccountCreated(true);
         } catch (error: any) {
             toast.error(error.message || "Failed to create account. Please try again.");
             setSubmitting(false);
         }
+    };
+
+    const handleDownloadManual = async () => {
+        setDownloadingManual(true);
+        try {
+            const doc = await generateUserManualPdf();
+            downloadPdf(doc, `NexaLMS_User_Manual_V1.0.0`);
+        } catch (error) {
+            console.error('Failed to download manual:', error);
+        }
+        setDownloadingManual(false);
     };
 
     // Success screen
@@ -55,10 +76,15 @@ export default function InviteAcceptPage() {
                     </div>
                     <div style={{ margin: '1.5rem 0' }}>
                         <CheckCircle size={56} style={{ color: 'var(--green-600)', margin: '0 auto 1rem' }} />
-                        <h2 className="auth-title" style={{ color: 'var(--green-700)' }}>Account Created!</h2>
+                        <h2 className="auth-title" style={{ color: 'var(--green-700)' }}>
+                            {isRecovery ? 'Password Updated!' : 'Account Created!'}
+                        </h2>
                         <p className="auth-subtitle" style={{ marginTop: '0.5rem', lineHeight: 1.6 }}>
-                            Your account has been created successfully.<br />
-                            You can now log in using your email and the password you just set.
+                            {isRecovery ? (
+                                <>Your password has been reset successfully.<br />You can now sign in with your new password.</>
+                            ) : (
+                                <>Your account has been created successfully.<br />You can now log in using your email and the password you just set.</>
+                            )}
                         </p>
                     </div>
 
@@ -75,6 +101,22 @@ export default function InviteAcceptPage() {
                     <p className="text-sm text-center text-muted mt-4">
                         Or <a href="/auth/login" className="underline font-bold">sign in here</a> if you're already on the platform.
                     </p>
+
+                    <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'linear-gradient(135deg, var(--green-50), var(--white))', borderRadius: '8px' }}>
+                        <div className="flex items-center gap-2 mb-2 justify-center">
+                            <Book size={18} className="text-green-600" />
+                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>User Manual</p>
+                        </div>
+                        <p className="text-sm text-muted mb-3">Download the comprehensive NexaLMS user guide (PDF)</p>
+                        <button
+                            className="btn btn-primary btn-sm btn-full"
+                            onClick={handleDownloadManual}
+                            disabled={downloadingManual}
+                        >
+                            {downloadingManual ? <span className="spinner" /> : <><Download size={16} /> Download Manual</>}
+                        </button>
+                        <p className="text-xs text-muted text-center mt-2">Version 1.0.0 • Jan 7, 2025</p>
+                    </div>
                 </div>
             </div>
         );
@@ -91,9 +133,11 @@ export default function InviteAcceptPage() {
                     <div className="auth-logo-icon">N</div>
                     <span className="auth-logo-text">NexaLMS</span>
                 </div>
-                <h2 className="auth-title">Create Your Account</h2>
+                <h2 className="auth-title">{isRecovery ? 'Reset Your Password' : 'Create Your Account'}</h2>
                 <p className="auth-subtitle">
-                    Set a secure password to activate your account.
+                    {isRecovery
+                        ? 'Choose a new password for your admin account.'
+                        : 'Set a secure password to activate your account.'}
                 </p>
 
                 <form onSubmit={handleCreateAccount} className="mt-4">
@@ -130,12 +174,28 @@ export default function InviteAcceptPage() {
                     </div>
 
                     <button type="submit" className="btn btn-primary btn-lg btn-full mt-4" disabled={submitting}>
-                        {submitting ? <span className="spinner" /> : 'Create Account'}
+                        {submitting ? <span className="spinner" /> : isRecovery ? 'Update Password' : 'Create Account'}
                     </button>
 
                     <p className="text-sm text-center text-muted mt-4">
                         If you reached here by mistake, please <a href="/auth/login" className="underline font-bold">sign in</a>.
                     </p>
+
+                    <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'linear-gradient(135deg, var(--green-50), var(--white))', borderRadius: '8px' }}>
+                        <div className="flex items-center gap-2 mb-2">
+                            <Book size={18} className="text-green-600" />
+                            <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem' }}>User Manual</p>
+                        </div>
+                        <p className="text-sm text-muted mb-3">Download the comprehensive NexaLMS user guide (PDF)</p>
+                        <button
+                            className="btn btn-primary btn-sm btn-full"
+                            onClick={handleDownloadManual}
+                            disabled={downloadingManual}
+                        >
+                            {downloadingManual ? <span className="spinner" /> : <><Download size={16} /> Download Manual</>}
+                        </button>
+                        <p className="text-xs text-muted text-center mt-2">Version 1.0.0 • Jan 7, 2025</p>
+                    </div>
                 </form>
             </div>
         </div>

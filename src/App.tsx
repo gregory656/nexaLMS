@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SchoolProvider } from './contexts/SchoolContext';
+import { HelpProvider } from './contexts/HelpContext';
 
 // Layouts
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -73,9 +74,10 @@ export default function App() {
   return (
     <AuthProvider>
       <SchoolProvider>
-        <BrowserRouter>
-          <Toaster position="top-right" />
-          <Routes>
+        <HelpProvider>
+          <BrowserRouter>
+            <Toaster position="top-right" />
+            <Routes>
             {/* Public Auth Routes */}
             <Route path="/auth/login" element={<LoginPage />} />
             <Route path="/auth/signup" element={<SignupPage />} />
@@ -132,6 +134,7 @@ export default function App() {
             </Route>
           </Routes>
         </BrowserRouter>
+        </HelpProvider>
       </SchoolProvider>
     </AuthProvider>
   );
