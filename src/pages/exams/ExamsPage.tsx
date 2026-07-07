@@ -463,7 +463,7 @@ export default function ExamsPage() {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
             toast.success('Analytics downloaded');
         } catch (err: any) {
             toast.error('Download failed: ' + err.message);

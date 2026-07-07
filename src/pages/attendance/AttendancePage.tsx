@@ -29,7 +29,7 @@ function downloadRowsAsCsv(rows: Record<string, any>[], sheetName: string, fileN
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 export default function AttendancePage() {
@@ -374,13 +374,13 @@ export default function AttendancePage() {
                 const rows = (data as any[])
                     .sort((a, b) => String(b.attendance_sessions?.date || '').localeCompare(String(a.attendance_sessions?.date || '')))
                     .map(record => ({
-                    StudentName: `${record.students?.first_name} ${record.students?.last_name}`,
-                    AdmissionNo: record.students?.admission_number || '',
-                    Class: record.attendance_sessions?.classes?.name || '',
-                    Date: record.attendance_sessions?.date || '',
-                    Session: record.attendance_sessions?.session_type || '',
-                    Status: record.status
-                }));
+                        StudentName: `${record.students?.first_name} ${record.students?.last_name}`,
+                        AdmissionNo: record.students?.admission_number || '',
+                        Class: record.attendance_sessions?.classes?.name || '',
+                        Date: record.attendance_sessions?.date || '',
+                        Session: record.attendance_sessions?.session_type || '',
+                        Status: record.status
+                    }));
 
                 if (downloadFormat === 'pdf') {
                     const doc = await createPdfWithHeader({
@@ -441,11 +441,11 @@ export default function AttendancePage() {
                 const rows = (data as any[])
                     .sort((a, b) => String(b.teacher_attendance_sessions?.date || '').localeCompare(String(a.teacher_attendance_sessions?.date || '')))
                     .map(record => ({
-                    TeacherName: `${record.teachers?.first_name} ${record.teachers?.last_name}`,
-                    Date: record.teacher_attendance_sessions?.date || '',
-                    Session: record.teacher_attendance_sessions?.session_type || '',
-                    Status: record.status
-                }));
+                        TeacherName: `${record.teachers?.first_name} ${record.teachers?.last_name}`,
+                        Date: record.teacher_attendance_sessions?.date || '',
+                        Session: record.teacher_attendance_sessions?.session_type || '',
+                        Status: record.status
+                    }));
 
                 if (downloadFormat === 'pdf') {
                     const doc = await createPdfWithHeader({

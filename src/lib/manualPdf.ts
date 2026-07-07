@@ -1091,13 +1091,6 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 }
 
 export function downloadPdf(doc: jsPDF, fileName: string) {
-    const pdfBlob = doc.output('blob');
-    const url = URL.createObjectURL(pdfBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${fileName}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // Let jsPDF handle the cross-browser saving inherently
+    doc.save(`${fileName}.pdf`);
 }
