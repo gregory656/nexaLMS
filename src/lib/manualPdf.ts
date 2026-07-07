@@ -4,7 +4,11 @@
  */
 
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { applyPlugin } from 'jspdf-autotable';
+
+// CRITICAL: Explicitly apply the plugin so production tree-shaking
+// never strips the jsPDF prototype extension (doc.autoTable)
+applyPlugin(jsPDF);
 
 // Extend jsPDF with lastAutoTable
 declare module 'jspdf' {
@@ -37,13 +41,13 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(128, 128, 128);
         doc.text(`NexaLMS User Manual v${MANUAL_VERSION}`, 15, 10);
-        
+
         if (chapterTitle) {
             doc.text(chapterTitle, pageWidth / 2, 10, { align: 'center' });
         }
-        
+
         doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth - 15, 10, { align: 'right' });
-        
+
         // Line
         doc.setDrawColor(200, 200, 200);
         doc.setLineWidth(0.3);
@@ -80,11 +84,11 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
     // Cover Page
     doc.setFillColor(34, 139, 34);
     doc.rect(0, 0, pageWidth, pageHeight, 'F');
-    
+
     // White content area
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(15, 20, pageWidth - 30, pageHeight - 40, 5, 5, 'F');
-    
+
     // Logo placeholder
     doc.setFillColor(34, 139, 34);
     doc.circle(pageWidth / 2, 50, 20, 'F');
@@ -92,32 +96,32 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
     doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
     doc.text('N', pageWidth / 2, 58, { align: 'center' });
-    
+
     // Title
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(28);
     doc.setFont('helvetica', 'bold');
     doc.text('NexaLMS', pageWidth / 2, 90, { align: 'center' });
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'normal');
     doc.text('School Management System', pageWidth / 2, 100, { align: 'center' });
-    
+
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('User Manual', pageWidth / 2, 120, { align: 'center' });
-    
+
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
     doc.text(`Version ${MANUAL_VERSION}`, pageWidth / 2, 135, { align: 'center' });
     doc.text(MANUAL_DATE, pageWidth / 2, 142, { align: 'center' });
-    
+
     doc.setFontSize(10);
     doc.text('Prepared by', pageWidth / 2, 170, { align: 'center' });
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('NexaGen Technologies', pageWidth / 2, 178, { align: 'center' });
-    
+
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.text('www.nexagen.co.ke', pageWidth / 2, 185, { align: 'center' });
@@ -125,16 +129,16 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Table of Contents
     addNewPage('Table of Contents');
-    
+
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Table of Contents', pageWidth / 2, 30, { align: 'center' });
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const tocData = [
         ['Chapter 1', 'Introduction', '3'],
         ['Chapter 2', 'Getting Started', '4'],
@@ -153,7 +157,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         ['Chapter 15', 'Frequently Asked Questions', '17'],
         ['Chapter 16', 'Support & Contact', '18'],
     ];
-    
+
     autoTable(doc, {
         startY: 40,
         head: [['Chapter', 'Title', 'Page']],
@@ -177,18 +181,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 1: Introduction
     addNewPage('Chapter 1 - Introduction');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 1', 15, 30);
     doc.setFontSize(20);
     doc.text('Introduction', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const introText = [
         'Welcome to NexaLMS - a comprehensive School Management System designed to streamline',
         'administrative tasks, enhance academic management, and improve communication between',
@@ -210,7 +214,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '• Analytics and Reporting',
         '• Communication Tools',
     ];
-    
+
     let yPos = 50;
     introText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -219,18 +223,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 2: Getting Started
     addNewPage('Chapter 2 - Getting Started');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 2', 15, 30);
     doc.setFontSize(20);
     doc.text('Getting Started', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const gettingStartedText = [
         'System Requirements',
         '• Supported browsers: Chrome, Firefox, Safari, Edge (latest versions)',
@@ -261,7 +265,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '• Finance - Fee management and payments',
         '• Administration - Settings, roles, announcements',
     ];
-    
+
     yPos = 50;
     gettingStartedText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -270,18 +274,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 3: School Setup
     addNewPage('Chapter 3 - School Setup');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 3', 15, 30);
     doc.setFontSize(20);
     doc.text('School Setup', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const schoolSetupText = [
         'School Profile',
         'Configure your school\'s basic information that appears on reports and documents.',
@@ -327,7 +331,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '5. Assign class teachers to each class',
         '6. Save',
     ];
-    
+
     yPos = 50;
     schoolSetupText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -336,18 +340,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 4: Students
     addNewPage('Chapter 4 - Students');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 4', 15, 30);
     doc.setFontSize(20);
     doc.text('Students', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const studentsText = [
         'Adding a Student',
         'Add individual students with their personal information, academic details, and guardian',
@@ -393,7 +397,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '5. Add notes if necessary',
         '6. Confirm the transfer',
     ];
-    
+
     yPos = 50;
     studentsText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -402,18 +406,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 5: Teachers
     addNewPage('Chapter 5 - Teachers');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 5', 15, 30);
     doc.setFontSize(20);
     doc.text('Teachers', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const teachersText = [
         'Adding a Teacher',
         'Create teacher profiles with their qualifications, subjects, and contact information.',
@@ -447,7 +451,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '5. Set as class teacher if applicable',
         '6. Save assignments',
     ];
-    
+
     yPos = 50;
     teachersText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -456,18 +460,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 6: Roles & Permissions
     addNewPage('Chapter 6 - Roles & Permissions');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 6', 15, 30);
     doc.setFontSize(20);
     doc.text('Roles & Permissions', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const rolesText = [
         'Creating Roles',
         'Create custom roles with specific permissions based on responsibilities.',
@@ -500,7 +504,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '5. Send invitation email',
         '6. User sets their password',
     ];
-    
+
     yPos = 50;
     rolesText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -509,18 +513,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 7: Timetable
     addNewPage('Chapter 7 - Timetable');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 7', 15, 30);
     doc.setFontSize(20);
     doc.text('Timetable', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const timetableText = [
         'Configuring Timetable',
         'Set up the timetable structure including periods, days, and break times.',
@@ -554,7 +558,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '4. Click download',
         '5. Print or distribute as needed',
     ];
-    
+
     yPos = 50;
     timetableText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -563,18 +567,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 8: Attendance
     addNewPage('Chapter 8 - Attendance');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 8', 15, 30);
     doc.setFontSize(20);
     doc.text('Attendance', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const attendanceText = [
         'Student Attendance',
         'Record daily student attendance by class.',
@@ -606,7 +610,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '4. Generate and view report',
         '5. Export if needed',
     ];
-    
+
     yPos = 50;
     attendanceText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -615,18 +619,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 9: Examinations
     addNewPage('Chapter 9 - Examinations');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 9', 15, 30);
     doc.setFontSize(20);
     doc.text('Examinations', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const examsText = [
         'Creating an Examination',
         'Set up examinations for specific terms and classes.',
@@ -671,7 +675,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '4. Export reports as needed',
         '5. Compare with previous exams',
     ];
-    
+
     yPos = 50;
     examsText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -680,18 +684,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 10: Analytics
     addNewPage('Chapter 10 - Analytics');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 10', 15, 30);
     doc.setFontSize(20);
     doc.text('Analytics', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const analyticsText = [
         'Academic Performance',
         'Analyze student and teacher performance with detailed metrics.',
@@ -734,7 +738,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '4. Identify patterns',
         '5. Project future performance',
     ];
-    
+
     yPos = 50;
     analyticsText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -743,18 +747,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 11: Report Cards
     addNewPage('Chapter 11 - Report Cards');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 11', 15, 30);
     doc.setFontSize(20);
     doc.text('Report Cards', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const reportCardsText = [
         'Generating Report Cards',
         'Create report cards for individual students or entire classes.',
@@ -787,7 +791,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '4. Click download all',
         '5. Files download individually',
     ];
-    
+
     yPos = 50;
     reportCardsText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -796,18 +800,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 12: Finance
     addNewPage('Chapter 12 - Finance');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 12', 15, 30);
     doc.setFontSize(20);
     doc.text('Finance', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const financeText = [
         'Fee Structure Setup',
         'Define fee categories and amounts for different grade levels.',
@@ -851,7 +855,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '4. View charts and summaries',
         '5. Export as PDF or CSV',
     ];
-    
+
     yPos = 50;
     financeText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -860,18 +864,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 13: Announcements
     addNewPage('Chapter 13 - Announcements');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 13', 15, 30);
     doc.setFontSize(20);
     doc.text('Announcements', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const announcementsText = [
         'Creating Announcements',
         'Create announcements for students, teachers, parents, or specific groups.',
@@ -905,7 +909,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '4. Add description if needed',
         '5. Save announcement',
     ];
-    
+
     yPos = 50;
     announcementsText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -914,18 +918,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 14: Troubleshooting
     addNewPage('Chapter 14 - Troubleshooting');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 14', 15, 30);
     doc.setFontSize(20);
     doc.text('Troubleshooting', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const troubleshootingData = [
         ['Problem', 'Solution'],
         ['Cannot log in with correct credentials', 'Clear browser cache and cookies, then try again. If the issue persists, reset your password.'],
@@ -941,7 +945,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         ['Page not loading', 'Refresh the page. Check that you have a stable internet connection. Try a different browser.'],
         ['Timeout errors', 'Reduce the amount of data being processed. Try exporting smaller batches of data.'],
     ];
-    
+
     autoTable(doc, {
         startY: 45,
         head: [troubleshootingData[0]],
@@ -970,18 +974,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 15: FAQ
     addNewPage('Chapter 15 - FAQ');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 15', 15, 30);
     doc.setFontSize(20);
     doc.text('Frequently Asked Questions', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const faqData = [
         ['Question', 'Answer'],
         ['Can I edit published results?', 'Published results can be edited by administrators with appropriate permissions. Go to the exam, click "Edit Results", make changes, and republish.'],
@@ -993,7 +997,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         ['Do I need to install software?', 'No, NexaLMS is entirely web-based. You only need a modern web browser and internet connection.'],
         ['How often is the system backed up?', 'Data is backed up daily. Additional backups are performed before major updates.'],
     ];
-    
+
     autoTable(doc, {
         startY: 45,
         head: [faqData[0]],
@@ -1022,18 +1026,18 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Chapter 16: Support
     addNewPage('Chapter 16 - Support');
-    
+
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(34, 139, 34);
     doc.text('Chapter 16', 15, 30);
     doc.setFontSize(20);
     doc.text('Support & Contact', 15, 38);
-    
+
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(11);
     doc.setFont('helvetica', 'normal');
-    
+
     const supportText = [
         'Contact Information',
         '',
@@ -1065,7 +1069,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
         '• Join webinars and workshops',
         '• Access the knowledge base',
     ];
-    
+
     yPos = 50;
     supportText.forEach(line => {
         doc.text(line, 15, yPos);
@@ -1074,7 +1078,7 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 
     // Update total pages
     totalPages = currentPage;
-    
+
     // Update page numbers on all pages
     for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
