@@ -1091,6 +1091,16 @@ export async function generateUserManualPdf(_options?: ManualOptions): Promise<j
 }
 
 export function downloadPdf(doc: jsPDF, fileName: string) {
-    // Let jsPDF handle the cross-browser saving inherently
-    doc.save(`${fileName}.pdf`);
+    // Chrome asynchronous download engine may fail if ObjectURL is revoked too quickly.
+    // Instead of jsPDF's built-in doc.save(), we generate a Blob and use a delayed revocation.
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileName}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
