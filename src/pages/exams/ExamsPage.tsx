@@ -5,9 +5,10 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import {
     LayoutDashboard, Settings, FileText, BarChart3, Download,
-    Plus, X, Trash2, Shuffle, BookOpen
+    Plus, X, Trash2, Shuffle, BookOpen, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import HelpIcon from '../../components/ui/HelpIcon';
+import { addTableToPdf, createPdfWithHeader, downloadPdf } from '../../lib/pdf';
 
 const TABS = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -63,6 +64,7 @@ export default function ExamsPage() {
     const [dlClass, setDlClass] = useState('');
     const [dlSubject, setDlSubject] = useState('');
     const [dlStudent, setDlStudent] = useState('');
+    const [dlFormat, setDlFormat] = useState<'csv' | 'pdf'>('pdf');
     const [analyticsDownloading, setAnalyticsDownloading] = useState(false);
 
     const fetchAll = async () => {
@@ -77,7 +79,7 @@ export default function ExamsPage() {
             supabase.from('grade_scales').select('*').eq('school_id', school.id).order('min_marks', { ascending: false }),
             supabase.from('terms').select('*').eq('school_id', school.id).order('term_number'),
             supabase.from('academic_years').select('*').eq('school_id', school.id).order('start_date', { ascending: false }),
-            supabase.from('exam_results').select('*, students(first_name, last_name, admission_number), subjects(name), exams(name)').eq('school_id', school.id).limit(200),
+            supabase.from('exam_results').select('*, students(first_name, last_name, admission_number, class_id, classes(name)), subjects(name), exams(name)').eq('school_id', school.id).limit(10000),
         ]);
         setExams(exRes.data || []);
         setExamTypes(etRes.data || []);
@@ -92,6 +94,17 @@ export default function ExamsPage() {
     };
 
     useEffect(() => { fetchAll(); }, [school?.id]);
+
+    useEffect(() => {
+        if (!selectedExam || !selectedClass || !selectedSubject) return;
+        const existingMarks: Record<string, string> = {};
+        results
+            .filter(result => result.exam_id === selectedExam && result.class_id === selectedClass && result.subject_id === selectedSubject)
+            .forEach(result => {
+                existingMarks[result.student_id] = String(result.marks ?? '');
+            });
+        setMarksData(existingMarks);
+    }, [selectedExam, selectedClass, selectedSubject, results]);
 
     const getGrade = (marks: number) => {
         for (const gs of gradeScales) {
@@ -527,6 +540,337 @@ export default function ExamsPage() {
         );
     };
 
+    const buildAdvancedAnalytics = (examId: string) => {
+        const examResults = results.filter(r => r.exam_id === examId);
+        const expectedRows = students.length * subjects.length;
+        const completion = expectedRows ? Math.round((examResults.length / expectedRows) * 100) : 0;
+        const studentMap: Record<string, { name: string; className: string; total: number; count: number }> = {};
+        const subjectMap: Record<string, { id: string; name: string; total: number; count: number }> = {};
+        const classMap: Record<string, { id: string; name: string; total: number; count: number; students: Set<string> }> = {};
+        const gradeCounts: Record<string, number> = {};
+
+        examResults.forEach(r => {
+            const marks = Number(r.marks || 0);
+            const studentName = `${r.students?.first_name || ''} ${r.students?.last_name || ''}`.trim();
+            const className = r.students?.classes?.name || classes.find(c => c.id === r.class_id)?.name || 'Unassigned';
+            if (!studentMap[r.student_id]) studentMap[r.student_id] = { name: studentName, className, total: 0, count: 0 };
+            studentMap[r.student_id].total += marks;
+            studentMap[r.student_id].count += 1;
+
+            const subjectName = r.subjects?.name || subjects.find(s => s.id === r.subject_id)?.name || 'Subject';
+            if (!subjectMap[r.subject_id]) subjectMap[r.subject_id] = { id: r.subject_id, name: subjectName, total: 0, count: 0 };
+            subjectMap[r.subject_id].total += marks;
+            subjectMap[r.subject_id].count += 1;
+
+            if (!classMap[r.class_id]) classMap[r.class_id] = { id: r.class_id, name: className, total: 0, count: 0, students: new Set() };
+            classMap[r.class_id].total += marks;
+            classMap[r.class_id].count += 1;
+            classMap[r.class_id].students.add(r.student_id);
+
+            const grade = r.grade || getGrade(marks)?.grade || 'Ungraded';
+            gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
+        });
+
+        const ranked = Object.entries(studentMap)
+            .map(([id, item]) => ({ id, ...item, mean: item.count ? item.total / item.count : 0 }))
+            .sort((a, b) => b.mean - a.mean);
+        const subjectsRanked = Object.values(subjectMap)
+            .map(item => ({ ...item, mean: item.count ? item.total / item.count : 0 }))
+            .sort((a, b) => b.mean - a.mean);
+        const classesRanked = Object.values(classMap)
+            .map(item => ({ ...item, mean: item.count ? item.total / item.count : 0, studentCount: item.students.size }))
+            .sort((a, b) => b.mean - a.mean);
+        const overallMean = examResults.length ? examResults.reduce((sum, r) => sum + Number(r.marks || 0), 0) / examResults.length : 0;
+        const weakSubjects = subjectsRanked.slice().sort((a, b) => a.mean - b.mean).slice(0, 3);
+        const coverage = classes.flatMap(cls => subjects.map(subject => {
+            const classStudentsCount = students.filter(s => s.class_id === cls.id).length;
+            const keyed = examResults.filter(r => r.class_id === cls.id && r.subject_id === subject.id).length;
+            return {
+                classId: cls.id,
+                className: cls.name,
+                subjectId: subject.id,
+                subjectName: subject.name,
+                keyed,
+                expected: classStudentsCount,
+                remaining: Math.max(classStudentsCount - keyed, 0),
+                percent: classStudentsCount ? Math.round((keyed / classStudentsCount) * 100) : 0,
+            };
+        }));
+
+        return { examResults, expectedRows, completion, ranked, subjectsRanked, classesRanked, gradeCounts, overallMean, weakSubjects, coverage };
+    };
+
+    const renderAdvancedAnalytics = () => {
+        const analyticsExam = selectedExam || exams[0]?.id || '';
+        const analytics = analyticsExam ? buildAdvancedAnalytics(analyticsExam) : null;
+        const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
+        const maxSubjectMean = Math.max(...(analytics?.subjectsRanked.map(s => s.mean) || [1]), 1);
+        const maxClassMean = Math.max(...(analytics?.classesRanked.map(c => c.mean) || [1]), 1);
+        const gradeTotal = Object.values(analytics?.gradeCounts || {}).reduce((sum, count) => sum + count, 0);
+        let pieStart = 0;
+        const pieGradient = Object.entries(analytics?.gradeCounts || {}).map(([_, count], index) => {
+            const slice = gradeTotal ? (count / gradeTotal) * 100 : 0;
+            const segment = `${colors[index % colors.length]} ${pieStart}% ${pieStart + slice}%`;
+            pieStart += slice;
+            return segment;
+        }).join(', ');
+
+        return (
+            <>
+                <div className="flex justify-between items-center mb-4">
+                    <div><h3 className="text-lg font-bold">Exam Analytics Command Centre</h3><p className="text-sm text-muted">School, class, subject, student, grade, and marks-entry completion intelligence.</p></div>
+                    <select className="form-select" style={{ width: 'auto', minWidth: 240 }} value={selectedExam} onChange={e => setSelectedExam(e.target.value)}>
+                        <option value="">Latest Exam</option>
+                        {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                    </select>
+                </div>
+
+                {!analytics || analytics.examResults.length === 0 ? (
+                    <div className="empty-state card"><h3>No results yet</h3><p>Enter marks first, then analytics will populate here.</p></div>
+                ) : (
+                    <>
+                        <div className="grid-4 mb-6">
+                            <div className="stat-card"><div className="stat-icon green"><BarChart3 size={22} /></div><div className="stat-info"><h3>School Mean</h3><div className="stat-value">{analytics.overallMean.toFixed(1)}</div></div></div>
+                            <div className="stat-card"><div className="stat-icon blue"><FileText size={22} /></div><div className="stat-info"><h3>Marks Entered</h3><div className="stat-value">{analytics.examResults.length}</div></div></div>
+                            <div className="stat-card"><div className="stat-icon orange"><CheckCircle size={22} /></div><div className="stat-info"><h3>Completion</h3><div className="stat-value">{analytics.completion}%</div></div></div>
+                            <div className="stat-card"><div className="stat-icon green"><BookOpen size={22} /></div><div className="stat-info"><h3>Top Student</h3><div className="stat-value" style={{ fontSize: '1rem' }}>{analytics.ranked[0]?.name || 'N/A'}</div></div></div>
+                        </div>
+
+                        <div className="exam-analytics-grid mb-6">
+                            <div className="card">
+                                <div className="card-header"><h3 className="card-title">Subject Performance</h3></div>
+                                <div className="exam-bars">
+                                    {analytics.subjectsRanked.map((subject, index) => (
+                                        <div className="exam-bar-row" key={subject.id}>
+                                            <span>{subject.name}</span>
+                                            <div><i style={{ width: `${Math.max((subject.mean / maxSubjectMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
+                                            <strong>{subject.mean.toFixed(1)}</strong>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="card">
+                                <div className="card-header"><h3 className="card-title">Grade Distribution</h3></div>
+                                <div className="exam-pie-layout">
+                                    <div className="exam-pie" style={{ background: `conic-gradient(${pieGradient || '#e5e7eb 0% 100%'})` }} />
+                                    <div className="exam-pie-legend">
+                                        {Object.entries(analytics.gradeCounts).map(([grade, count], index) => (
+                                            <span key={grade}><i style={{ background: colors[index % colors.length] }} /> Grade {grade}: <strong>{count}</strong></span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid-2 mb-6">
+                            <div className="card">
+                                <div className="card-header"><h3 className="card-title">Class Mean Ranking</h3></div>
+                                <div className="exam-bars">
+                                    {analytics.classesRanked.slice(0, 12).map((cls, index) => (
+                                        <div className="exam-bar-row" key={cls.id}>
+                                            <span>{cls.name}</span>
+                                            <div><i style={{ width: `${Math.max((cls.mean / maxClassMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
+                                            <strong>{cls.mean.toFixed(1)}</strong>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="card">
+                                <div className="card-header"><h3 className="card-title">Action Insights</h3></div>
+                                <div className="exam-insights">
+                                    <div><CheckCircle size={18} /><span>Best class: <strong>{analytics.classesRanked[0]?.name || 'N/A'}</strong> at {analytics.classesRanked[0]?.mean.toFixed(1) || '0.0'} mean.</span></div>
+                                    <div><AlertTriangle size={18} /><span>Support focus: <strong>{analytics.weakSubjects.map(s => s.name).join(', ') || 'N/A'}</strong>.</span></div>
+                                    <div><FileText size={18} /><span>{Math.max(analytics.expectedRows - analytics.examResults.length, 0)} result rows still missing across the full school matrix.</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card mb-6">
+                            <div className="card-header"><h3 className="card-title">Marks Entry Coverage by Class and Subject</h3></div>
+                            <div className="table-wrapper">
+                                <table className="data-table">
+                                    <thead><tr><th>Class</th><th>Subject</th><th>Keyed</th><th>Remaining</th><th>Progress</th></tr></thead>
+                                    <tbody>
+                                        {analytics.coverage.filter(row => row.remaining > 0 || row.percent < 100).slice(0, 100).map(row => (
+                                            <tr key={`${row.classId}-${row.subjectId}`}>
+                                                <td><strong>{row.className}</strong></td>
+                                                <td>{row.subjectName}</td>
+                                                <td>{row.keyed} / {row.expected}</td>
+                                                <td>{row.remaining}</td>
+                                                <td><div className="exam-progress"><i style={{ width: `${row.percent}%` }} /><span>{row.percent}%</span></div></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="card">
+                            <div className="card-header"><h3 className="card-title">Student Ranking</h3></div>
+                            <div className="table-wrapper"><table className="data-table"><thead><tr><th>Pos</th><th>Student</th><th>Class</th><th>Total</th><th>Mean</th><th>Grade</th><th>Subjects</th></tr></thead><tbody>
+                                {analytics.ranked.slice(0, 120).map((s, i) => {
+                                    const gs = getGrade(s.mean);
+                                    return <tr key={s.id}><td><strong>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(1)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td><td>{s.count}</td></tr>;
+                                })}
+                            </tbody></table></div>
+                        </div>
+                    </>
+                )}
+            </>
+        );
+    };
+
+    const handleDownloadAdvancedAnalytics = async () => {
+        if (!dlExam) {
+            toast.error('Select an exam');
+            return;
+        }
+        setAnalyticsDownloading(true);
+        try {
+            const analytics = buildAdvancedAnalytics(dlExam);
+            let filtered = analytics.examResults;
+            if (dlScope === 'class' && dlClass) filtered = filtered.filter(r => r.class_id === dlClass);
+            if (dlScope === 'individual' && dlStudent) filtered = filtered.filter(r => r.student_id === dlStudent);
+            if (dlScope === 'subject' && dlSubject) filtered = filtered.filter(r => r.subject_id === dlSubject);
+            if (filtered.length === 0) {
+                toast.error('No results found for this criteria');
+                setAnalyticsDownloading(false);
+                return;
+            }
+
+            const rows = filtered.map(r => [
+                `${r.students?.first_name || ''} ${r.students?.last_name || ''}`.trim(),
+                r.students?.admission_number || '',
+                r.students?.classes?.name || classes.find(c => c.id === r.class_id)?.name || '',
+                r.subjects?.name || '',
+                String(r.marks || 0),
+                r.grade || '',
+            ]);
+
+            if (dlFormat === 'csv') {
+                const ws = XLSX.utils.aoa_to_sheet([['Student', 'Adm No.', 'Class', 'Subject', 'Marks', 'Grade'], ...rows]);
+                const csv = XLSX.utils.sheet_to_csv(ws);
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `exam_analytics_${dlScope}_${Date.now()}.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                toast.success('Analytics CSV downloaded');
+            } else {
+                const examName = exams.find(ex => ex.id === dlExam)?.name || 'Exam';
+                const doc = await createPdfWithHeader({
+                    title: 'Examination Analytics Report',
+                    subtitle: `${examName} | Mean ${analytics.overallMean.toFixed(1)} | Completion ${analytics.completion}%`,
+                    schoolName: school?.name || 'School',
+                    schoolMotto: school?.motto,
+                    logoUrl: school?.logo_url,
+                    watermarkUrl: school?.watermark_url,
+                    orientation: 'landscape',
+                });
+                addTableToPdf(doc, ['Metric', 'Value'], [
+                    ['School Mean', analytics.overallMean.toFixed(1)],
+                    ['Marks Entered', String(analytics.examResults.length)],
+                    ['Expected Rows', String(analytics.expectedRows)],
+                    ['Completion', `${analytics.completion}%`],
+                    ['Top Student', analytics.ranked[0]?.name || 'N/A'],
+                ]);
+                addTableToPdf(doc, ['Subject', 'Mean', 'Entries'], analytics.subjectsRanked.map(s => [s.name, s.mean.toFixed(1), String(s.count)]), (doc as any).lastAutoTable.finalY + 8);
+                addTableToPdf(doc, ['Student', 'Adm No.', 'Class', 'Subject', 'Marks', 'Grade'], rows.slice(0, 120), (doc as any).lastAutoTable.finalY + 8);
+                downloadPdf(doc, `exam_analytics_${dlScope}_${Date.now()}`);
+                toast.success('Analytics PDF downloaded');
+            }
+        } catch (err: any) {
+            toast.error('Download failed: ' + err.message);
+        }
+        setAnalyticsDownloading(false);
+    };
+
+    const renderAdvancedDownload = () => {
+        const analytics = dlExam ? buildAdvancedAnalytics(dlExam) : null;
+        const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
+        const classMeans = analytics?.classesRanked.slice(0, 4) || [];
+        const totalGrades = Object.values(analytics?.gradeCounts || {}).reduce((sum, count) => sum + count, 0);
+        let pieStart = 0;
+        const gradePie = Object.entries(analytics?.gradeCounts || {}).map(([_, count], index) => {
+            const slice = totalGrades ? (count / totalGrades) * 100 : 0;
+            const segment = `${colors[index % colors.length]} ${pieStart}% ${pieStart + slice}%`;
+            pieStart += slice;
+            return segment;
+        }).join(', ');
+
+        return (
+            <div className="grid" style={{ gap: '1rem' }}>
+                <div className="card">
+                    <h3 className="card-title mb-4">Examination Analytics Download Centre</h3>
+                    <div className="grid-3 gap-4 mb-4">
+                        <div className="form-group">
+                            <label className="form-label">Download Scope</label>
+                            <select className="form-select" value={dlScope} onChange={e => setDlScope(e.target.value as any)}>
+                                <option value="school">Whole School</option>
+                                <option value="class">By Class</option>
+                                <option value="individual">Individual Student</option>
+                                <option value="subject">By Subject</option>
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Select Exam</label>
+                            <select className="form-select" value={dlExam} onChange={e => setDlExam(e.target.value)}>
+                                <option value="">Select Exam...</option>
+                                {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Format</label>
+                            <select className="form-select" value={dlFormat} onChange={e => setDlFormat(e.target.value as any)}>
+                                <option value="pdf">PDF Report</option>
+                                <option value="csv">CSV Data</option>
+                            </select>
+                        </div>
+                        {dlScope === 'class' && <div className="form-group"><label className="form-label">Select Class</label><select className="form-select" value={dlClass} onChange={e => setDlClass(e.target.value)}><option value="">Select Class...</option>{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>}
+                        {dlScope === 'individual' && <div className="form-group"><label className="form-label">Select Student</label><select className="form-select" value={dlStudent} onChange={e => setDlStudent(e.target.value)}><option value="">Select Student...</option>{students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}</select></div>}
+                        {dlScope === 'subject' && <div className="form-group"><label className="form-label">Select Subject</label><select className="form-select" value={dlSubject} onChange={e => setDlSubject(e.target.value)}><option value="">Select Subject...</option>{subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
+                    </div>
+                    <button className="btn btn-primary" onClick={handleDownloadAdvancedAnalytics} disabled={!dlExam || analyticsDownloading}>
+                        {analyticsDownloading ? <span className="spinner" /> : <><Download size={18} /> Download {dlFormat.toUpperCase()}</>}
+                    </button>
+                </div>
+
+                {analytics && (
+                    <div className="exam-download-preview">
+                        <div className="card">
+                            <div className="card-header"><h3 className="card-title">Download Preview</h3></div>
+                            <div className="grid-3">
+                                <div className="exam-preview-metric"><span>School Mean</span><strong>{analytics.overallMean.toFixed(1)}</strong></div>
+                                <div className="exam-preview-metric"><span>Completion</span><strong>{analytics.completion}%</strong></div>
+                                <div className="exam-preview-metric"><span>Rows</span><strong>{analytics.examResults.length}</strong></div>
+                            </div>
+                        </div>
+                        <div className="card">
+                            <div className="card-header"><h3 className="card-title">Grade Mix</h3></div>
+                            <div className="exam-pie-layout">
+                                <div className="exam-pie small" style={{ background: `conic-gradient(${gradePie || '#e5e7eb 0% 100%'})` }} />
+                                <div className="exam-pie-legend">{Object.entries(analytics.gradeCounts).map(([grade, count], index) => <span key={grade}><i style={{ background: colors[index % colors.length] }} /> {grade}: <strong>{count}</strong></span>)}</div>
+                            </div>
+                        </div>
+                        <div className="card">
+                            <div className="card-header"><h3 className="card-title">Top Classes</h3></div>
+                            <div className="exam-bars">
+                                {classMeans.map((cls, index) => <div className="exam-bar-row" key={cls.id}><span>{cls.name}</span><div><i style={{ width: `${cls.mean}%`, background: colors[index % colors.length] }} /></div><strong>{cls.mean.toFixed(1)}</strong></div>)}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    void renderAnalytics;
+    void renderDownload;
+
     return (
         <>
             <div className="page-header">
@@ -561,8 +905,8 @@ export default function ExamsPage() {
                     {activeTab === 'setup' && renderSetup()}
                     {activeTab === 'grades' && renderGrades()}
                     {activeTab === 'marks' && renderMarks()}
-                    {activeTab === 'analytics' && renderAnalytics()}
-                    {activeTab === 'download' && renderDownload()}
+                    {activeTab === 'analytics' && renderAdvancedAnalytics()}
+                    {activeTab === 'download' && renderAdvancedDownload()}
                 </>
             )}
 

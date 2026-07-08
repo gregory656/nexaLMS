@@ -3006,6 +3006,168 @@ h4 {
   animation: none;
 }
 
+/* ============================================
+   Exam Analytics
+   ============================================ */
+.exam-analytics-grid,
+.exam-download-preview {
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr;
+  gap: 1rem;
+}
+
+.exam-download-preview {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.exam-bars {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.exam-bar-row {
+  display: grid;
+  grid-template-columns: 150px 1fr 52px;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.86rem;
+}
+
+.exam-bar-row span {
+  font-weight: 600;
+  color: var(--gray-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exam-bar-row div {
+  height: 12px;
+  background: var(--gray-100);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.exam-bar-row i {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+.exam-bar-row strong {
+  text-align: right;
+  color: var(--gray-900);
+}
+
+.exam-pie-layout {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 1rem;
+  align-items: center;
+}
+
+.exam-pie {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-md);
+  border: 8px solid var(--white);
+}
+
+.exam-pie.small {
+  width: 118px;
+  height: 118px;
+}
+
+.exam-pie-legend {
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.exam-pie-legend span {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--gray-600);
+}
+
+.exam-pie-legend i {
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.exam-insights {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.exam-insights div {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  font-size: 0.88rem;
+}
+
+.exam-insights svg {
+  color: var(--green-600);
+  flex-shrink: 0;
+}
+
+.exam-progress {
+  height: 22px;
+  min-width: 160px;
+  border-radius: var(--radius-full);
+  background: var(--gray-100);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--gray-200);
+}
+
+.exam-progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--green-500), #3b82f6);
+}
+
+.exam-progress span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--gray-800);
+}
+
+.exam-preview-metric {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--green-50), var(--white));
+  border: 1px solid var(--green-100);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.exam-preview-metric span {
+  color: var(--gray-500);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.exam-preview-metric strong {
+  color: var(--green-700);
+  font-size: 1.6rem;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

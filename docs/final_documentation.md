@@ -184,3 +184,42 @@ npm run build
 Result: build passed.
 
 The build reported the existing large bundle warning from Vite, but no TypeScript or build errors.
+
+## Follow-Up Fixes
+
+Implemented additional fixes after testing:
+
+- Fixed Timetable `Save Settings` duplicate-key failure by updating an existing `timetable_settings` row for the school/academic year instead of blindly inserting.
+- Added a duplicate-key retry fallback for timetable settings saves.
+- Changed Exams data loading to fetch up to 10,000 result rows instead of only 200, so seeded marks and analytics show correctly.
+- Marks Entry now preloads already-keyed marks when an exam, class, and subject are selected.
+- Rebuilt Exam Analytics into an advanced dashboard with:
+  - school mean
+  - marks entered
+  - completion percentage
+  - top student
+  - subject performance bars
+  - class mean ranking
+  - grade distribution pie chart
+  - action insights
+  - marks-entry coverage by class and subject
+  - remaining marks per class/subject
+- Upgraded the Download Centre with:
+  - PDF export option
+  - CSV export option
+  - colored preview metrics
+  - grade distribution pie chart
+  - top class performance bars
+
+Files changed for these fixes:
+
+- `src/pages/academics/TimetablePage.tsx`
+- `src/pages/exams/ExamsPage.tsx`
+- `src/index.css`
+
+Migration note:
+
+- Attempted to push `supabase/migrations/00008_subscription_pricing_plans.sql`.
+- The Supabase CLI did not complete in this environment, and the project does not expose an `exec_sql` RPC for applying SQL through the anon key.
+- The migration file remains ready to apply with a Supabase service-role key or database password.
+- No application feature currently depends on the unapplied `price_per_student` column; the pricing model is implemented in the frontend and documented.
