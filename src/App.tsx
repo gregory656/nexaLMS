@@ -32,6 +32,8 @@ import ExamsPage from './pages/exams/ExamsPage';
 import ReportCardsPage from './pages/reports/ReportCardsPage';
 import AttendancePage from './pages/attendance/AttendancePage';
 import FinancePage from './pages/finance/FinancePage';
+import DocumentationPage from './pages/documents/DocumentationPage';
+import SitePage from './pages/site/SitePage';
 
 // Simple placeholder pages for sections being built
 function Placeholder({ title }: { title: string }) {
@@ -82,6 +84,8 @@ export default function App() {
             <Route path="/auth/login" element={<LoginPage />} />
             <Route path="/auth/signup" element={<SignupPage />} />
             <Route path="/auth/create-account" element={<InviteAcceptPage />} />
+            <Route path="/site" element={<SitePage />} />
+            <Route path="/site/:page" element={<SitePage />} />
 
             {/* Setup Wizard */}
             <Route path="/setup" element={
@@ -126,6 +130,7 @@ export default function App() {
               {/* Administration */}
               <Route path="roles" element={<RolesPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
+              <Route path="documentation" element={<DocumentationPage />} />
               <Route path="announcements" element={<Placeholder title="Announcements" />} />
               <Route path="settings" element={<SetupPage />} />
 

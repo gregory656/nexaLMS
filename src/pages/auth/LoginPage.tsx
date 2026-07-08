@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Mail, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
 import nexagenImage from '../../assets/nexagen.png';
@@ -101,6 +101,9 @@ export default function LoginPage() {
                 </div>
 
                 <h2 className="auth-title">{recoveryMode ? 'Reset password' : 'Welcome back'}</h2>
+                <div className="auth-site-link-row">
+                    <Link to="/site" className="auth-site-link">Site</Link>
+                </div>
 
                 {error && <div className="form-error-banner">{error}</div>}
                 {message && <div className="success-banner">{message}</div>}

@@ -1,7 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { CreditCard, Info } from 'lucide-react';
+import { Check, CreditCard, Info } from 'lucide-react';
+
+const plans = [
+    {
+        name: 'Starter',
+        price: 5,
+        description: 'Essential school operations for a clean first rollout.',
+        features: ['Student Management', 'Teachers', 'Attendance'],
+    },
+    {
+        name: 'Standard',
+        price: 7,
+        description: 'Academic management for reports, exams, and timetables.',
+        features: ['Everything in Starter', 'Exams', 'Report Cards', 'Timetable'],
+    },
+    {
+        name: 'Premium',
+        price: 10,
+        description: 'Full operating system for finance, analytics, and priority support.',
+        features: ['Everything in Standard', 'Finance', 'Analytics', 'Priority Support'],
+    },
+];
 
 export default function SubscriptionPage() {
     const { school } = useAuth();
@@ -13,7 +34,6 @@ export default function SubscriptionPage() {
             if (!school?.id) return;
             setLoading(true);
 
-            // Fetch only active students
             const { count } = await supabase
                 .from('students')
                 .select('*', { count: 'exact', head: true })
@@ -27,17 +47,12 @@ export default function SubscriptionPage() {
         fetchData();
     }, [school?.id]);
 
-    const pricePerStudent = 10;
-    const calculateTotal = () => {
-        return studentCount * pricePerStudent;
-    };
-
     return (
         <>
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Software Licensing & Subscription</h1>
-                    <p className="page-subtitle">Manage your NexaLMS billing and features</p>
+                    <p className="page-subtitle">Manage NexaLMS billing, packages, and official payment details</p>
                 </div>
             </div>
 
@@ -56,19 +71,41 @@ export default function SubscriptionPage() {
                         </div>
                     </div>
 
-                    <div className="card" style={{ maxWidth: 600, margin: '0 auto', borderTop: '4px solid var(--green-500)' }}>
+                    <div className="subscription-plan-grid mb-6">
+                        {plans.map((plan, index) => (
+                            <div className="subscription-plan-card" key={plan.name}>
+                                <div className="subscription-plan-top">
+                                    <span className={`badge ${index === 0 ? 'badge-blue' : index === 1 ? 'badge-green' : 'badge-orange'}`}>{plan.name}</span>
+                                    <strong>KES {plan.price}</strong>
+                                    <small>per active student / month</small>
+                                </div>
+                                <p>{plan.description}</p>
+                                <div className="subscription-feature-list">
+                                    {plan.features.map(feature => (
+                                        <span key={feature}><Check size={15} /> {feature}</span>
+                                    ))}
+                                </div>
+                                <div className="subscription-total">
+                                    <span>For {studentCount} students</span>
+                                    <strong>KES {(studentCount * plan.price).toLocaleString()} / month</strong>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="card" style={{ maxWidth: 720, margin: '0 auto', borderTop: '4px solid var(--green-500)' }}>
                         <div className="text-center mb-6">
                             <div className="stat-icon mx-auto mb-4" style={{ background: 'var(--green-50)', color: 'var(--green-600)', width: 64, height: 64 }}>
                                 <CreditCard size={32} />
                             </div>
                             <h2 className="text-2xl font-bold">Monthly Usage Calculation</h2>
-                            <p className="text-muted text-sm mt-2">No fixed tiers, no hidden fees. You only pay for what you use.</p>
+                            <p className="text-muted text-sm mt-2">Choose a package, then multiply by active students only.</p>
                         </div>
 
                         <div className="bg-gray-50 rounded-lg p-6 mb-6">
                             <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
-                                <span className="text-gray-600 uppercase text-xs font-bold tracking-wider">Metric</span>
-                                <span className="text-gray-600 uppercase text-xs font-bold tracking-wider">Value</span>
+                                <span className="text-gray-600 uppercase text-xs font-bold tracking-wider">Plan</span>
+                                <span className="text-gray-600 uppercase text-xs font-bold tracking-wider">Expected Payment</span>
                             </div>
 
                             <div className="flex justify-between items-center mb-4">
@@ -76,39 +113,34 @@ export default function SubscriptionPage() {
                                 <span className="font-bold text-lg">{studentCount} <span className="text-sm font-normal text-muted">students</span></span>
                             </div>
 
-                            <div className="flex justify-between items-center mb-4">
-                                <span className="font-semibold text-gray-800">Price per Student</span>
-                                <span className="font-bold text-lg">KES {pricePerStudent} <span className="text-sm font-normal text-muted">/ month</span></span>
-                            </div>
-
-                            <div className="flex items-center justify-center my-6 text-gray-400">
-                                {/* Visual Separator */}
-                                <div className="flex-1 border-t border-gray-300"></div>
-                                <span className="mx-4 font-mono text-xl">✕</span>
-                                <div className="flex-1 border-t border-gray-300"></div>
-                            </div>
-
-                            <div className="flex justify-between items-center mt-4 pt-4 border-t-2 border-gray-800">
-                                <span className="font-bold text-gray-800 text-xl">Total Expected Payment</span>
-                                <span className="font-black text-2xl" style={{ color: 'var(--green-600)' }}>
-                                    KES {calculateTotal().toLocaleString()} <span className="text-sm font-normal text-muted">/ month</span>
-                                </span>
-                            </div>
+                            {plans.map(plan => (
+                                <div className="subscription-calc-row" key={plan.name}>
+                                    <span>{plan.name} at KES {plan.price}</span>
+                                    <strong>KES {(studentCount * plan.price).toLocaleString()} <small>/ month</small></strong>
+                                </div>
+                            ))}
                         </div>
 
                         <div className="flex flex-col gap-3">
-                            <button className="btn btn-primary btn-full py-4 flex items-center justify-center gap-3 relative overflow-hidden"
+                            <button
+                                className="btn btn-primary btn-full py-4 flex items-center justify-center gap-3 relative overflow-hidden"
                                 style={{ backgroundColor: '#25D366', borderColor: '#25D366' }}
-                                onClick={() => window.open('https://nexagen.co.ke/stkpush', '_blank')}>
-                                {/* Simple M-PESA text logo representation */}
+                                onClick={() => window.open('https://nexagen.co.ke/stkpush', '_blank')}
+                            >
                                 <div className="font-black italic tracking-tighter text-white" style={{ fontSize: '1.2rem', padding: '2px 6px', background: 'rgba(0,0,0,0.1)', borderRadius: '4px' }}>
                                     M-PESA
                                 </div>
                                 <div className="flex flex-col items-start leading-tight">
                                     <span className="font-bold text-sm">Pay via M-PESA</span>
-                                    <span className="text-xs opacity-90">0719637416 STEPEHEN OTIENO</span>
+                                    <span className="text-xs opacity-90">0719637416 STEPHEN OTIENO</span>
                                 </div>
                             </button>
+                            <div className="subscription-payment-grid">
+                                <div><strong>Paybill</strong><span>522522</span></div>
+                                <div><strong>Account</strong><span>1339185296</span></div>
+                                <div><strong>Bank Transfer</strong><span>1339185396</span></div>
+                                <div><strong>Name</strong><span>STEPHEN OTIENO</span></div>
+                            </div>
                         </div>
                     </div>
 
@@ -118,7 +150,9 @@ export default function SubscriptionPage() {
                             <div>
                                 <h4 className="text-sm font-bold" style={{ color: 'var(--info)' }}>Official NexaGen Billing Policy</h4>
                                 <p className="text-xs mt-1" style={{ color: '#1e40af' }}>
-                                    Your software access fee is dynamically calculated at KES {pricePerStudent} per active student profile per month. Alumni, transferred, or inactive students are excluded from this calculation. Ensure your records are up-to-date to maintain accurate billing.
+                                    Your software access fee is dynamically calculated from the selected package:
+                                    Starter KES 5, Standard KES 7, or Premium KES 10 per active student profile per month.
+                                    Alumni, transferred, or inactive students are excluded from this calculation.
                                     <br /><br />
                                     <strong>Need Help?</strong> Contact support via <a href="https://nexagen.co.ke" target="_blank" rel="noreferrer" className="underline font-bold">nexagen.co.ke</a>
                                 </p>

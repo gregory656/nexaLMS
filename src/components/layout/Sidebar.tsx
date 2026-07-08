@@ -6,7 +6,7 @@ import {
     BookOpen, Calendar, ClipboardList, DollarSign,
     Settings, Shield, CreditCard,
     School, FileText, Clock, Megaphone,
-    UserCog, BarChart3, LogOut, Home, HelpCircle
+    UserCog, BarChart3, LogOut, Home, HelpCircle, Globe2
 } from 'lucide-react';
 import HelpSidebar from './HelpSidebar';
 
@@ -66,6 +66,8 @@ const navSections = [
         title: 'Support',
         items: [
             { to: 'help', icon: HelpCircle, label: 'Help Centre', action: 'open-help' },
+            { to: '/documentation', icon: FileText, label: 'Documents' },
+            { to: '/site', icon: Globe2, label: 'Visit Site' },
         ]
     }
 ];

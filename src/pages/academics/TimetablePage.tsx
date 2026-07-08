@@ -113,7 +113,7 @@ export default function TimetablePage() {
             supabase.from('teacher_subject_assignments')
                 .select('*, teachers(first_name, last_name), subjects(name, lessons_per_week), classes(name)')
                 .eq('school_id', school.id),
-            supabase.from('timetable_settings').select('*').eq('school_id', school.id).maybeSingle(),
+            supabase.from('timetable_settings').select('*').eq('school_id', school.id).order('updated_at', { ascending: false }),
             supabase.from('timetables').select('*').eq('school_id', school.id).order('version', { ascending: false }),
         ]);
 
@@ -125,13 +125,15 @@ export default function TimetablePage() {
         setTimetables((ttRes.data || []) as TimetableRecord[]);
 
         const cur = yearList.find(y => y.is_current) || yearList[0];
-        if (setRes.data) {
-            setSettings(setRes.data as TimetableSettings);
+        const settingRows = setRes.data || [];
+        const selectedSettings = settingRows.find((row: any) => row.academic_year_id === cur?.id) || settingRows[0];
+        if (selectedSettings) {
+            setSettings(selectedSettings as TimetableSettings);
             const preset = WORKING_DAY_PRESETS.find(p =>
-                JSON.stringify(p.days) === JSON.stringify(setRes.data.working_days)
+                JSON.stringify(p.days) === JSON.stringify(selectedSettings.working_days)
             );
             setDayPreset(preset?.label || 'Custom');
-            if (!preset) setCustomDays(setRes.data.working_days);
+            if (!preset) setCustomDays(selectedSettings.working_days);
         } else if (cur) {
             setSettings(s => ({
                 ...s,
@@ -229,11 +231,44 @@ export default function TimetablePage() {
             updated_at: new Date().toISOString(),
         };
 
-        const { error } = settings.id
-            ? await supabase.from('timetable_settings').update(payload).eq('id', settings.id)
-            : await supabase.from('timetable_settings').insert(payload);
+        let saveError: any = null;
+        if (settings.id) {
+            const { error } = await supabase.from('timetable_settings').update(payload).eq('id', settings.id);
+            saveError = error;
+        } else {
+            const { data: existing, error: findError } = await supabase
+                .from('timetable_settings')
+                .select('id')
+                .eq('school_id', school.id)
+                .eq('academic_year_id', settings.academic_year_id)
+                .limit(1)
+                .maybeSingle();
 
-        if (error) toast.error(error.message);
+            if (findError) saveError = findError;
+            else if (existing?.id) {
+                const { error } = await supabase.from('timetable_settings').update(payload).eq('id', existing.id);
+                saveError = error;
+            } else {
+                const { error } = await supabase.from('timetable_settings').insert(payload);
+                saveError = error;
+
+                if (saveError?.code === '23505') {
+                    const { data: duplicate } = await supabase
+                        .from('timetable_settings')
+                        .select('id')
+                        .eq('school_id', school.id)
+                        .eq('academic_year_id', settings.academic_year_id)
+                        .limit(1)
+                        .maybeSingle();
+                    if (duplicate?.id) {
+                        const retry = await supabase.from('timetable_settings').update(payload).eq('id', duplicate.id);
+                        saveError = retry.error;
+                    }
+                }
+            }
+        }
+
+        if (saveError) toast.error(saveError.message);
         else {
             toast.success('Timetable settings saved');
             await fetchAll();
