@@ -96,128 +96,221 @@ export interface GeneratorInput {
     onProgress?: (pct: number) => void;
 }
 
-export function generateTimetable(input: GeneratorInput): GenerationResult {
-    const { settings, assignments, slots, onProgress } = input;
-    const entries: GenerationResult['entries'] = [];
+const MAX_GENERATION_ATTEMPTS = 24;
+const MAX_PLACEMENT_CHECKS = 250_000;
+
+type LessonTask = LessonAssignment & {
+    lessonNumber: number;
+    totalForAssignment: number;
+};
+
+function incrementNestedCount(map: Map<string, Map<number, number>>, id: string, day: number) {
+    if (!map.has(id)) map.set(id, new Map());
+    const dayMap = map.get(id)!;
+    dayMap.set(day, (dayMap.get(day) || 0) + 1);
+}
+
+function getNestedCount(map: Map<string, Map<number, number>>, id: string, day: number): number {
+    return map.get(id)?.get(day) || 0;
+}
+
+function buildCapacityErrors(
+    settings: TimetableSettings,
+    assignments: LessonAssignment[],
+    slots: TimeSlot[]
+): string[] {
     const errors: string[] = [];
+    const days = Math.max(settings.working_days.length, 0);
+    const slotsByClass = slots.length;
+    const maxClassLessons = days * Math.max(settings.max_class_lessons_per_day || 0, 0);
+    const maxTeacherLessons = days * Math.max(settings.max_teacher_lessons_per_day || 0, 0);
+    const classDemand = new Map<string, { name: string; lessons: number }>();
+    const teacherDemand = new Map<string, { name: string; lessons: number }>();
 
-    const teacherSchedule = new Map<string, Set<string>>();
-    const classSchedule = new Map<string, Set<string>>();
-    const teacherDailyCount = new Map<string, Map<number, number>>();
-    const classDailyCount = new Map<string, Map<number, number>>();
+    for (const assignment of assignments) {
+        const lessons = Math.max(0, Math.floor(assignment.lessons_per_week || 0));
+        const classItem = classDemand.get(assignment.class_id) || { name: assignment.class_name, lessons: 0 };
+        classItem.lessons += lessons;
+        classDemand.set(assignment.class_id, classItem);
 
-    const sorted = [...assignments].sort((a, b) => b.lessons_per_week - a.lessons_per_week);
-    const totalLessons = sorted.reduce((s, a) => s + a.lessons_per_week, 0);
-    let placed = 0;
+        const teacherItem = teacherDemand.get(assignment.teacher_id) || { name: assignment.teacher_name, lessons: 0 };
+        teacherItem.lessons += lessons;
+        teacherDemand.set(assignment.teacher_id, teacherItem);
+    }
 
-    const canPlace = (
-        assignment: LessonAssignment,
-        slot: TimeSlot,
-        teacherKey: string,
-        classKey: string
-    ): boolean => {
-        if (teacherSchedule.get(teacherKey)?.has(slot.key)) return false;
-        if (classSchedule.get(classKey)?.has(slot.key)) return false;
-
-        const tDaily = teacherDailyCount.get(assignment.teacher_id)?.get(slot.day) || 0;
-        if (tDaily >= settings.max_teacher_lessons_per_day) return false;
-
-        const cDaily = classDailyCount.get(assignment.class_id)?.get(slot.day) || 0;
-        if (cDaily >= settings.max_class_lessons_per_day) return false;
-
-        return true;
-    };
-
-    const place = (assignment: LessonAssignment, slot: TimeSlot) => {
-        const teacherKey = assignment.teacher_id;
-        const classKey = assignment.class_id;
-
-        if (!teacherSchedule.has(teacherKey)) teacherSchedule.set(teacherKey, new Set());
-        if (!classSchedule.has(classKey)) classSchedule.set(classKey, new Set());
-        if (!teacherDailyCount.has(teacherKey)) teacherDailyCount.set(teacherKey, new Map());
-        if (!classDailyCount.has(classKey)) classDailyCount.set(classKey, new Map());
-
-        teacherSchedule.get(teacherKey)!.add(slot.key);
-        classSchedule.get(classKey)!.add(slot.key);
-
-        const tMap = teacherDailyCount.get(teacherKey)!;
-        tMap.set(slot.day, (tMap.get(slot.day) || 0) + 1);
-        const cMap = classDailyCount.get(classKey)!;
-        cMap.set(slot.day, (cMap.get(slot.day) || 0) + 1);
-
-        entries.push({
-            class_id: assignment.class_id,
-            subject_id: assignment.subject_id,
-            teacher_id: assignment.teacher_id,
-            day_of_week: slot.day,
-            period_number: slot.period,
-            start_time: slot.start_time,
-            end_time: slot.end_time,
-            class_name: assignment.class_name,
-            subject_name: assignment.subject_name,
-            teacher_name: assignment.teacher_name,
-        });
-        placed++;
-        onProgress?.(Math.round((placed / totalLessons) * 100));
-    };
-
-    const unplace = (_entryIdx: number, assignment: LessonAssignment, slot: TimeSlot) => {
-        const teacherKey = assignment.teacher_id;
-        const classKey = assignment.class_id;
-        teacherSchedule.get(teacherKey)?.delete(slot.key);
-        classSchedule.get(classKey)?.delete(slot.key);
-        const tMap = teacherDailyCount.get(teacherKey);
-        if (tMap) tMap.set(slot.day, Math.max(0, (tMap.get(slot.day) || 1) - 1));
-        const cMap = classDailyCount.get(classKey);
-        if (cMap) cMap.set(slot.day, Math.max(0, (cMap.get(slot.day) || 1) - 1));
-        entries.pop();
-        placed--;
-    };
-
-    const backtrack = (assignmentIdx: number, lessonIdx: number): boolean => {
-        if (assignmentIdx >= sorted.length) return true;
-
-        const assignment = sorted[assignmentIdx];
-        if (lessonIdx >= assignment.lessons_per_week) {
-            return backtrack(assignmentIdx + 1, 0);
-        }
-
-        const shuffledSlots = [...slots].sort(() => Math.random() - 0.5);
-
-        for (const slot of shuffledSlots) {
-            if (canPlace(assignment, slot, assignment.teacher_id, assignment.class_id)) {
-                place(assignment, slot);
-                if (backtrack(assignmentIdx, lessonIdx + 1)) return true;
-                unplace(entries.length, assignment, slot);
-            }
-        }
-
-        return false;
-    };
-
-    const success = backtrack(0, 0);
-
-    if (!success) {
-        const placedCounts = new Map<string, number>();
-        for (const e of entries) {
-            const key = `${e.class_id}-${e.subject_id}-${e.teacher_id}`;
-            placedCounts.set(key, (placedCounts.get(key) || 0) + 1);
-        }
-        for (const a of sorted) {
-            const key = `${a.class_id}-${a.subject_id}-${a.teacher_id}`;
-            const got = placedCounts.get(key) || 0;
-            if (got < a.lessons_per_week) {
-                errors.push(
-                    `Could not place all ${a.lessons_per_week} lessons for ${a.subject_name} (${a.class_name}) with ${a.teacher_name}. Placed ${got}.`
-                );
-            }
-        }
-        if (errors.length === 0) {
-            errors.push('Timetable generation failed. Try adjusting periods, working days, or teacher assignments.');
+    for (const item of classDemand.values()) {
+        const capacity = Math.min(slotsByClass, maxClassLessons || slotsByClass);
+        if (item.lessons > capacity) {
+            errors.push(`${item.name} needs ${item.lessons} lessons, but the current setup allows only ${capacity}.`);
         }
     }
 
-    return { success: success && errors.length === 0, entries, errors };
+    for (const item of teacherDemand.values()) {
+        const capacity = Math.min(slots.length, maxTeacherLessons || slots.length);
+        if (item.lessons > capacity) {
+            errors.push(`${item.name} is assigned ${item.lessons} lessons, but the current setup allows only ${capacity}.`);
+        }
+    }
+
+    return errors;
+}
+
+export function generateTimetable(input: GeneratorInput): GenerationResult {
+    const { settings, assignments, slots, onProgress } = input;
+    const errors: string[] = [];
+
+    const usableAssignments = assignments
+        .map(assignment => ({
+            ...assignment,
+            lessons_per_week: Math.max(0, Math.floor(assignment.lessons_per_week || 0)),
+        }))
+        .filter(assignment => assignment.lessons_per_week > 0);
+
+    if (slots.length === 0) {
+        return { success: false, entries: [], errors: ['No lesson periods are available. Check the school day times, breaks, and periods per day.'] };
+    }
+
+    if (usableAssignments.length === 0) {
+        return { success: false, entries: [], errors: ['No weekly lessons were found for the selected academic year.'] };
+    }
+
+    const capacityErrors = buildCapacityErrors(settings, usableAssignments, slots);
+    if (capacityErrors.length > 0) {
+        return { success: false, entries: [], errors: capacityErrors };
+    }
+
+    const tasks: LessonTask[] = usableAssignments.flatMap(assignment =>
+        Array.from({ length: assignment.lessons_per_week }, (_, lessonNumber) => ({
+            ...assignment,
+            lessonNumber,
+            totalForAssignment: assignment.lessons_per_week,
+        }))
+    );
+    const totalLessons = tasks.length;
+    let bestEntries: GenerationResult['entries'] = [];
+    let bestMissingTasks: LessonTask[] = tasks;
+    let placementChecks = 0;
+    let lastProgress = -1;
+
+    const progress = (placed: number) => {
+        const pct = Math.round((placed / totalLessons) * 100);
+        if (pct !== lastProgress && (pct === 100 || pct - lastProgress >= 5)) {
+            lastProgress = pct;
+            onProgress?.(pct);
+        }
+    };
+
+    const orderedSlotsForAttempt = (attempt: number) => {
+        const byLeastBusyTime = [...slots].sort((a, b) => {
+            if (a.period !== b.period) return a.period - b.period;
+            return a.day - b.day;
+        });
+        const offset = attempt % byLeastBusyTime.length;
+        return byLeastBusyTime.slice(offset).concat(byLeastBusyTime.slice(0, offset));
+    };
+
+    for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS && placementChecks < MAX_PLACEMENT_CHECKS; attempt++) {
+        const entries: GenerationResult['entries'] = [];
+        const teacherSchedule = new Map<string, Set<string>>();
+        const classSchedule = new Map<string, Set<string>>();
+        const teacherDailyCount = new Map<string, Map<number, number>>();
+        const classDailyCount = new Map<string, Map<number, number>>();
+        const classSubjectDayCount = new Map<string, Map<number, number>>();
+        const attemptSlots = orderedSlotsForAttempt(attempt);
+        const missingTasks: LessonTask[] = [];
+
+        const orderedTasks = [...tasks].sort((a, b) => {
+            if (b.totalForAssignment !== a.totalForAssignment) return b.totalForAssignment - a.totalForAssignment;
+            if (a.lessonNumber !== b.lessonNumber) return a.lessonNumber - b.lessonNumber;
+            return `${a.class_name}-${a.subject_name}`.localeCompare(`${b.class_name}-${b.subject_name}`);
+        });
+
+        for (const task of orderedTasks) {
+            let bestSlot: TimeSlot | null = null;
+            let bestScore = Number.POSITIVE_INFINITY;
+            const preferredDay = (task.lessonNumber + attempt) % Math.max(settings.working_days.length, 1);
+
+            for (const slot of attemptSlots) {
+                placementChecks++;
+                if (placementChecks > MAX_PLACEMENT_CHECKS) break;
+                if (teacherSchedule.get(task.teacher_id)?.has(slot.key)) continue;
+                if (classSchedule.get(task.class_id)?.has(slot.key)) continue;
+                if (getNestedCount(teacherDailyCount, task.teacher_id, slot.day) >= settings.max_teacher_lessons_per_day) continue;
+                if (getNestedCount(classDailyCount, task.class_id, slot.day) >= settings.max_class_lessons_per_day) continue;
+
+                const subjectDayKey = `${task.class_id}-${task.subject_id}`;
+                const sameSubjectSameDay = getNestedCount(classSubjectDayCount, subjectDayKey, slot.day);
+                const teacherDayLoad = getNestedCount(teacherDailyCount, task.teacher_id, slot.day);
+                const classDayLoad = getNestedCount(classDailyCount, task.class_id, slot.day);
+                const dayDistance = Math.abs(settings.working_days.indexOf(slot.day) - preferredDay);
+                const score = sameSubjectSameDay * 20 + teacherDayLoad * 3 + classDayLoad * 2 + dayDistance + slot.period / 100;
+
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestSlot = slot;
+                }
+            }
+
+            if (!bestSlot) {
+                missingTasks.push(task);
+                if (placementChecks > MAX_PLACEMENT_CHECKS) break;
+                continue;
+            }
+
+            if (!teacherSchedule.has(task.teacher_id)) teacherSchedule.set(task.teacher_id, new Set());
+            if (!classSchedule.has(task.class_id)) classSchedule.set(task.class_id, new Set());
+            teacherSchedule.get(task.teacher_id)!.add(bestSlot.key);
+            classSchedule.get(task.class_id)!.add(bestSlot.key);
+            incrementNestedCount(teacherDailyCount, task.teacher_id, bestSlot.day);
+            incrementNestedCount(classDailyCount, task.class_id, bestSlot.day);
+            incrementNestedCount(classSubjectDayCount, `${task.class_id}-${task.subject_id}`, bestSlot.day);
+
+            entries.push({
+                class_id: task.class_id,
+                subject_id: task.subject_id,
+                teacher_id: task.teacher_id,
+                day_of_week: bestSlot.day,
+                period_number: bestSlot.period,
+                start_time: bestSlot.start_time,
+                end_time: bestSlot.end_time,
+                class_name: task.class_name,
+                subject_name: task.subject_name,
+                teacher_name: task.teacher_name,
+            });
+            progress(entries.length);
+        }
+
+        if (entries.length > bestEntries.length) {
+            bestEntries = entries;
+            bestMissingTasks = missingTasks;
+        }
+
+        if (missingTasks.length === 0) {
+            progress(totalLessons);
+            return { success: true, entries, errors: [] };
+        }
+    }
+
+    const placedCounts = new Map<string, number>();
+    for (const entry of bestEntries) {
+        const key = `${entry.class_id}-${entry.subject_id}-${entry.teacher_id}`;
+        placedCounts.set(key, (placedCounts.get(key) || 0) + 1);
+    }
+
+    const seen = new Set<string>();
+    for (const task of bestMissingTasks) {
+        const key = `${task.class_id}-${task.subject_id}-${task.teacher_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const got = placedCounts.get(key) || 0;
+        errors.push(`Could not place all ${task.totalForAssignment} lessons for ${task.subject_name} (${task.class_name}) with ${task.teacher_name}. Placed ${got}.`);
+    }
+
+    if (errors.length === 0) {
+        errors.push('Timetable generation could not satisfy every constraint. Try adding periods, reducing teacher/class daily limits, or reviewing teacher assignments.');
+    }
+
+    return { success: false, entries: bestEntries, errors };
 }
 
 export { DAY_NAMES };

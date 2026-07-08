@@ -21,6 +21,11 @@ const DEFAULT_BREAKS: TimetableBreak[] = [
 ];
 
 const TERM_OPTIONS = ['Term 1', 'Term 2', 'Term 3'];
+const ENTRY_INSERT_CHUNK_SIZE = 500;
+
+const waitForPaint = () => new Promise<void>(resolve => {
+    requestAnimationFrame(() => resolve());
+});
 
 export default function TimetablePage() {
     const { school, user } = useAuth();
@@ -326,6 +331,11 @@ export default function TimetablePage() {
 
         const fullSettings = settings as TimetableSettings;
         const slots = buildTimeSlots(fullSettings);
+        if (slots.length === 0) {
+            toast.error('No lesson periods are available. Check the day times, breaks, and periods per day.');
+            setGenerating(false);
+            return;
+        }
 
         const lessonAssignments: LessonAssignment[] = assignments
             .filter(a => a.class_id && a.academic_year_id === settings.academic_year_id)
@@ -338,6 +348,8 @@ export default function TimetablePage() {
                 subject_name: a.subjects?.name || 'Subject',
                 class_name: a.classes?.name || 'Class',
             }));
+
+        await waitForPaint();
 
         const result = generateTimetable({
             settings: fullSettings,
@@ -387,11 +399,15 @@ export default function TimetablePage() {
             school_id: school!.id,
         }));
 
-        const { error: entError } = await supabase.from('timetable_entries').insert(entryRows);
-        if (entError) {
-            toast.error(entError.message);
-            setGenerating(false);
-            return;
+        for (let i = 0; i < entryRows.length; i += ENTRY_INSERT_CHUNK_SIZE) {
+            const { error: entError } = await supabase
+                .from('timetable_entries')
+                .insert(entryRows.slice(i, i + ENTRY_INSERT_CHUNK_SIZE));
+            if (entError) {
+                toast.error(entError.message);
+                setGenerating(false);
+                return;
+            }
         }
 
         setProgress(100);
