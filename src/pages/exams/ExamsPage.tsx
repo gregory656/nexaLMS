@@ -66,6 +66,7 @@ export default function ExamsPage() {
     const [dlStudent, setDlStudent] = useState('');
     const [dlFormat, setDlFormat] = useState<'csv' | 'pdf'>('pdf');
     const [analyticsDownloading, setAnalyticsDownloading] = useState(false);
+    const [analyticsTab, setAnalyticsTab] = useState<'school' | 'trs' | 'subject' | 'individual'>('school');
 
     const fetchAll = async () => {
         if (!school?.id) return;
@@ -618,102 +619,152 @@ export default function ExamsPage() {
         return (
             <>
                 <div className="flex justify-between items-center mb-4">
-                    <div><h3 className="text-lg font-bold">Exam Analytics Command Centre</h3><p className="text-sm text-muted">School, class, subject, student, grade, and marks-entry completion intelligence.</p></div>
+                    <div><h3 className="text-lg font-bold">Exam Analytics Command Centre</h3><p className="text-sm text-muted">Advanced multidimensional analytics engine.</p></div>
                     <select className="form-select" style={{ width: 'auto', minWidth: 240 }} value={selectedExam} onChange={e => setSelectedExam(e.target.value)}>
                         <option value="">Latest Exam</option>
                         {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
                     </select>
                 </div>
 
+                <div className="flex gap-4 mb-6" style={{ borderBottom: '1px solid var(--gray-200)' }}>
+                    {[{ key: 'school', label: 'School Analysis' }, { key: 'trs', label: 'Teachers Analysis' }, { key: 'subject', label: 'Subject Analysis' }, { key: 'individual', label: 'Individual Analysis' }].map(tab => (
+                        <button key={tab.key} onClick={() => setAnalyticsTab(tab.key as any)} className="py-2 font-semibold text-sm" style={{ background: 'transparent', borderBottom: analyticsTab === tab.key ? '2px solid var(--green-600)' : 'none', color: analyticsTab === tab.key ? 'var(--green-700)' : 'var(--gray-500)', transition: 'all 0.2s' }}>{tab.label}</button>
+                    ))}
+                </div>
+
                 {!analytics || analytics.examResults.length === 0 ? (
                     <div className="empty-state card"><h3>No results yet</h3><p>Enter marks first, then analytics will populate here.</p></div>
                 ) : (
                     <>
-                        <div className="grid-4 mb-6">
-                            <div className="stat-card"><div className="stat-icon green"><BarChart3 size={22} /></div><div className="stat-info"><h3>School Mean</h3><div className="stat-value">{analytics.overallMean.toFixed(1)}</div></div></div>
-                            <div className="stat-card"><div className="stat-icon blue"><FileText size={22} /></div><div className="stat-info"><h3>Marks Entered</h3><div className="stat-value">{analytics.examResults.length}</div></div></div>
-                            <div className="stat-card"><div className="stat-icon orange"><CheckCircle size={22} /></div><div className="stat-info"><h3>Completion</h3><div className="stat-value">{analytics.completion}%</div></div></div>
-                            <div className="stat-card"><div className="stat-icon green"><BookOpen size={22} /></div><div className="stat-info"><h3>Top Student</h3><div className="stat-value" style={{ fontSize: '1rem' }}>{analytics.ranked[0]?.name || 'N/A'}</div></div></div>
-                        </div>
+                        {analyticsTab === 'school' && (
+                            <>
+                                <div className="grid-4 mb-6">
+                                    <div className="stat-card"><div className="stat-icon green"><BarChart3 size={22} /></div><div className="stat-info"><h3>School Mean</h3><div className="stat-value">{analytics.overallMean.toFixed(1)}</div></div></div>
+                                    <div className="stat-card"><div className="stat-icon blue"><FileText size={22} /></div><div className="stat-info"><h3>Marks Entered</h3><div className="stat-value">{analytics.examResults.length}</div></div></div>
+                                    <div className="stat-card"><div className="stat-icon orange"><CheckCircle size={22} /></div><div className="stat-info"><h3>Completion</h3><div className="stat-value">{analytics.completion}%</div></div></div>
+                                    <div className="stat-card"><div className="stat-icon green"><BookOpen size={22} /></div><div className="stat-info"><h3>Top Student</h3><div className="stat-value" style={{ fontSize: '1rem' }}>{analytics.ranked[0]?.name || 'N/A'}</div></div></div>
+                                </div>
 
-                        <div className="exam-analytics-grid mb-6">
-                            <div className="card">
-                                <div className="card-header"><h3 className="card-title">Subject Performance</h3></div>
-                                <div className="exam-bars">
-                                    {analytics.subjectsRanked.map((subject, index) => (
-                                        <div className="exam-bar-row" key={subject.id}>
-                                            <span>{subject.name}</span>
-                                            <div><i style={{ width: `${Math.max((subject.mean / maxSubjectMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
-                                            <strong>{subject.mean.toFixed(1)}</strong>
+                                <div className="exam-analytics-grid mb-6">
+                                    <div className="card">
+                                        <div className="card-header"><h3 className="card-title">Subject Performance</h3></div>
+                                        <div className="exam-bars">
+                                            {analytics.subjectsRanked.map((subject, index) => (
+                                                <div className="exam-bar-row" key={subject.id}>
+                                                    <span>{subject.name}</span>
+                                                    <div><i style={{ width: `${Math.max((subject.mean / maxSubjectMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
+                                                    <strong>{subject.mean.toFixed(1)}</strong>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
+                                    <div className="card">
+                                        <div className="card-header"><h3 className="card-title">Grade Distribution</h3></div>
+                                        <div className="exam-pie-layout">
+                                            <div className="exam-pie" style={{ background: `conic-gradient(${pieGradient || '#e5e7eb 0% 100%'})` }} />
+                                            <div className="exam-pie-legend">
+                                                {Object.entries(analytics.gradeCounts).map(([grade, count], index) => (
+                                                    <span key={grade}><i style={{ background: colors[index % colors.length] }} /> Grade {grade}: <strong>{count}</strong></span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid-2 mb-6">
+                                    <div className="card">
+                                        <div className="card-header"><h3 className="card-title">Class Mean Ranking</h3></div>
+                                        <div className="exam-bars">
+                                            {analytics.classesRanked.slice(0, 12).map((cls, index) => (
+                                                <div className="exam-bar-row" key={cls.id}>
+                                                    <span>{cls.name}</span>
+                                                    <div><i style={{ width: `${Math.max((cls.mean / maxClassMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
+                                                    <strong>{cls.mean.toFixed(1)}</strong>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="card">
+                                        <div className="card-header"><h3 className="card-title">Action Insights</h3></div>
+                                        <div className="exam-insights">
+                                            <div><CheckCircle size={18} /><span>Best class: <strong>{analytics.classesRanked[0]?.name || 'N/A'}</strong> at {analytics.classesRanked[0]?.mean.toFixed(1) || '0.0'} mean.</span></div>
+                                            <div><AlertTriangle size={18} /><span>Support focus: <strong>{analytics.weakSubjects.map(s => s.name).join(', ') || 'N/A'}</strong>.</span></div>
+                                            <div><FileText size={18} /><span>{Math.max(analytics.expectedRows - analytics.examResults.length, 0)} result rows still missing.</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="card mb-6">
+                                    <div className="card-header"><h3 className="card-title">Marks Entry Coverage by Class and Subject</h3></div>
+                                    <div className="table-wrapper">
+                                        <table className="data-table">
+                                            <thead><tr><th>Class</th><th>Subject</th><th>Keyed</th><th>Remaining</th><th>Progress</th></tr></thead>
+                                            <tbody>
+                                                {analytics.coverage.filter(row => row.remaining > 0 || row.percent < 100).slice(0, 100).map(row => (
+                                                    <tr key={`${row.classId}-${row.subjectId}`}>
+                                                        <td><strong>{row.className}</strong></td>
+                                                        <td>{row.subjectName}</td>
+                                                        <td>{row.keyed} / {row.expected}</td>
+                                                        <td>{row.remaining}</td>
+                                                        <td><div className="exam-progress"><i style={{ width: `${row.percent}%` }} /><span>{row.percent}%</span></div></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {analyticsTab === 'trs' && (
+                            <div className="grid-2 mb-6">
+                                <div className="card">
+                                    <div className="card-header"><h3 className="card-title">Teacher Value Add Tracking</h3></div>
+                                    <div className="exam-insights">
+                                        <div style={{ color: 'var(--green-600)' }}><CheckCircle size={18} /><span>Most improved teacher: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
+                                        <div style={{ color: 'var(--danger)' }}><AlertTriangle size={18} /><span>Most dropped teacher: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
+                                        <div style={{ color: 'var(--blue-600)' }}><BarChart3 size={18} /><span>Best overall teacher mean: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
+                                    </div>
+                                    <p className="text-sm text-muted mt-4">Note: Historical trend tracking is calculating. Check back after next examination period.</p>
                                 </div>
                             </div>
-                            <div className="card">
-                                <div className="card-header"><h3 className="card-title">Grade Distribution</h3></div>
-                                <div className="exam-pie-layout">
-                                    <div className="exam-pie" style={{ background: `conic-gradient(${pieGradient || '#e5e7eb 0% 100%'})` }} />
-                                    <div className="exam-pie-legend">
-                                        {Object.entries(analytics.gradeCounts).map(([grade, count], index) => (
-                                            <span key={grade}><i style={{ background: colors[index % colors.length] }} /> Grade {grade}: <strong>{count}</strong></span>
+                        )}
+
+                        {analyticsTab === 'subject' && (
+                            <div className="grid-2 mb-6">
+                                <div className="card">
+                                    <div className="card-header"><h3 className="card-title">Subject Value Add Tracking</h3></div>
+                                    <div className="exam-insights">
+                                        <div style={{ color: 'var(--green-600)' }}><CheckCircle size={18} /><span>Most improved subject: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
+                                        <div style={{ color: 'var(--danger)' }}><AlertTriangle size={18} /><span>Most dropped subject: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
+                                        <div style={{ color: 'var(--blue-600)' }}><BarChart3 size={18} /><span>Current best subject: <strong style={{ color: 'var(--gray-900)' }}>{analytics.subjectsRanked[0]?.name || 'N/A'}</strong> ({analytics.subjectsRanked[0]?.mean.toFixed(1)})</span></div>
+                                    </div>
+                                </div>
+                                <div className="card">
+                                    <div className="card-header"><h3 className="card-title">All Subjects Detail</h3></div>
+                                    <div className="exam-bars">
+                                        {analytics.subjectsRanked.map((subject, index) => (
+                                            <div className="exam-bar-row" key={subject.id}>
+                                                <span>{subject.name}</span>
+                                                <div><i style={{ width: `${Math.max((subject.mean / maxSubjectMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
+                                                <strong>{subject.mean.toFixed(1)}</strong>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
-                        <div className="grid-2 mb-6">
+                        {analyticsTab === 'individual' && (
                             <div className="card">
-                                <div className="card-header"><h3 className="card-title">Class Mean Ranking</h3></div>
-                                <div className="exam-bars">
-                                    {analytics.classesRanked.slice(0, 12).map((cls, index) => (
-                                        <div className="exam-bar-row" key={cls.id}>
-                                            <span>{cls.name}</span>
-                                            <div><i style={{ width: `${Math.max((cls.mean / maxClassMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
-                                            <strong>{cls.mean.toFixed(1)}</strong>
-                                        </div>
-                                    ))}
-                                </div>
+                                <div className="card-header"><h3 className="card-title">Individual Student Ranking</h3></div>
+                                <div className="table-wrapper"><table className="data-table"><thead><tr><th>Pos</th><th>Student</th><th>Class</th><th>Total</th><th>Mean</th><th>Grade</th><th>Subjects</th></tr></thead><tbody>
+                                    {analytics.ranked.slice(0, 120).map((s, i) => {
+                                        const gs = getGrade(s.mean);
+                                        return <tr key={s.id}><td><strong>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(1)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td><td>{s.count}</td></tr>;
+                                    })}
+                                </tbody></table></div>
                             </div>
-                            <div className="card">
-                                <div className="card-header"><h3 className="card-title">Action Insights</h3></div>
-                                <div className="exam-insights">
-                                    <div><CheckCircle size={18} /><span>Best class: <strong>{analytics.classesRanked[0]?.name || 'N/A'}</strong> at {analytics.classesRanked[0]?.mean.toFixed(1) || '0.0'} mean.</span></div>
-                                    <div><AlertTriangle size={18} /><span>Support focus: <strong>{analytics.weakSubjects.map(s => s.name).join(', ') || 'N/A'}</strong>.</span></div>
-                                    <div><FileText size={18} /><span>{Math.max(analytics.expectedRows - analytics.examResults.length, 0)} result rows still missing across the full school matrix.</span></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="card mb-6">
-                            <div className="card-header"><h3 className="card-title">Marks Entry Coverage by Class and Subject</h3></div>
-                            <div className="table-wrapper">
-                                <table className="data-table">
-                                    <thead><tr><th>Class</th><th>Subject</th><th>Keyed</th><th>Remaining</th><th>Progress</th></tr></thead>
-                                    <tbody>
-                                        {analytics.coverage.filter(row => row.remaining > 0 || row.percent < 100).slice(0, 100).map(row => (
-                                            <tr key={`${row.classId}-${row.subjectId}`}>
-                                                <td><strong>{row.className}</strong></td>
-                                                <td>{row.subjectName}</td>
-                                                <td>{row.keyed} / {row.expected}</td>
-                                                <td>{row.remaining}</td>
-                                                <td><div className="exam-progress"><i style={{ width: `${row.percent}%` }} /><span>{row.percent}%</span></div></td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div className="card">
-                            <div className="card-header"><h3 className="card-title">Student Ranking</h3></div>
-                            <div className="table-wrapper"><table className="data-table"><thead><tr><th>Pos</th><th>Student</th><th>Class</th><th>Total</th><th>Mean</th><th>Grade</th><th>Subjects</th></tr></thead><tbody>
-                                {analytics.ranked.slice(0, 120).map((s, i) => {
-                                    const gs = getGrade(s.mean);
-                                    return <tr key={s.id}><td><strong>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(1)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td><td>{s.count}</td></tr>;
-                                })}
-                            </tbody></table></div>
-                        </div>
+                        )}
                     </>
                 )}
             </>

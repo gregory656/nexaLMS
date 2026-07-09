@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useHelpSidebar } from '../../contexts/HelpContext';
 import {
@@ -76,7 +77,7 @@ export default function Sidebar() {
     const { user, school, signOut } = useAuth();
     const navigate = useNavigate();
     const { isOpen: helpOpen, initialSection, closeHelp, openHelp } = useHelpSidebar();
-    
+
     const handleLogout = async () => {
         await signOut();
         navigate('/auth/login');
@@ -99,64 +100,90 @@ export default function Sidebar() {
 
     return (
         <>
-        <aside className="sidebar">
-            <div className="sidebar-logo">
-                {school?.logo_url || school?.watermark_url ? (
-                    <img className="sidebar-logo-image" src={school.logo_url || school.watermark_url} alt="" />
-                ) : (
-                    <div className="sidebar-logo-icon">N</div>
-                )}
-                <div>
-                    <div className="sidebar-logo-text">{school?.name || 'NexaLMS'}</div>
-                    <div className="sidebar-logo-sub">School ERP</div>
-                </div>
-            </div>
-
-            <nav className="sidebar-nav">
-                {navSections.map(section => (
-                    <div key={section.title} className="sidebar-section">
-                        <div className="sidebar-section-title">{section.title}</div>
-                        {section.items.map(item => (
-                            item.action === 'open-help' ? (
-                                <button
-                                    key={item.to}
-                                    className="sidebar-item"
-                                    onClick={() => handleNavClick(item)}
-                                    style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-                                >
-                                    <item.icon />
-                                    <span>{item.label}</span>
-                                </button>
-                            ) : (
-                                <NavLink
-                                    key={item.to}
-                                    to={item.to}
-                                    className={({ isActive }) =>
-                                        `sidebar-item ${isActive ? 'active' : ''}`
-                                    }
-                                >
-                                    <item.icon />
-                                    <span>{item.label}</span>
-                                </NavLink>
-                            )
-                        ))}
+            <aside className="sidebar">
+                <div className="sidebar-logo">
+                    {school?.logo_url || school?.watermark_url ? (
+                        <img className="sidebar-logo-image" src={school.logo_url || school.watermark_url} alt="" />
+                    ) : (
+                        <div className="sidebar-logo-icon">N</div>
+                    )}
+                    <div>
+                        <div className="sidebar-logo-text">{school?.name || 'NexaLMS'}</div>
+                        <div className="sidebar-logo-sub">School ERP</div>
                     </div>
-                ))}
-            </nav>
-
-            <div className="sidebar-footer">
-                <div className="sidebar-user" onClick={handleLogout} title="Sign Out">
-                    <div className="sidebar-user-avatar">{initials}</div>
-                    <div className="sidebar-user-info">
-                        <div className="sidebar-user-name">{user?.full_name || 'Admin'}</div>
-                        <div className="sidebar-user-role">Administrator</div>
-                    </div>
-                    <LogOut size={16} style={{ color: 'var(--gray-400)' }} />
                 </div>
-            </div>
-        </aside>
-        
-        <HelpSidebar isOpen={helpOpen} onClose={closeHelp} initialSection={initialSection} />
+
+                <nav className="sidebar-nav">
+                    {navSections.map(section => (
+                        <div key={section.title} className="sidebar-section">
+                            <div className="sidebar-section-title">{section.title}</div>
+                            {section.items.map(item => (
+                                item.action === 'open-help' ? (
+                                    <button
+                                        key={item.to}
+                                        className="sidebar-item"
+                                        onClick={() => handleNavClick(item)}
+                                        style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+                                    >
+                                        <item.icon />
+                                        <span>{item.label}</span>
+                                    </button>
+                                ) : (
+                                    <NavLink
+                                        key={item.to}
+                                        to={item.to}
+                                        className={({ isActive }) =>
+                                            `sidebar-item ${isActive ? 'active' : ''}`
+                                        }
+                                        onClick={(e) => {
+                                            if (item.to === '/announcements') {
+                                                e.preventDefault();
+                                                toast.custom(() => (
+                                                    <div style={{
+                                                        background: 'white',
+                                                        padding: '1.25rem',
+                                                        borderRadius: '12px',
+                                                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                                                        borderLeft: '4px solid var(--green-500)',
+                                                        display: 'flex',
+                                                        gap: '1rem',
+                                                        alignItems: 'flex-start',
+                                                        maxWidth: '400px'
+                                                    }}>
+                                                        <div style={{ fontSize: '1.5rem' }}>📢</div>
+                                                        <div>
+                                                            <h4 style={{ margin: '0 0 0.5rem', fontSize: '1rem', color: '#0f172a' }}>Custom Domain Required</h4>
+                                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', lineHeight: 1.5 }}>
+                                                                The Announcements Dashboard is exclusively reserved for schools hosting NexaLMS on their own custom domain. Contact NexaGen to upgrade your plan and communicate directly with staff, parents, and students.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ), { duration: 7000 });
+                                            }
+                                        }}
+                                    >
+                                        <item.icon />
+                                        <span>{item.label}</span>
+                                    </NavLink>
+                                )
+                            ))}
+                        </div>
+                    ))}
+                </nav>
+
+                <div className="sidebar-footer">
+                    <div className="sidebar-user" onClick={handleLogout} title="Sign Out">
+                        <div className="sidebar-user-avatar">{initials}</div>
+                        <div className="sidebar-user-info">
+                            <div className="sidebar-user-name">{user?.full_name || 'Admin'}</div>
+                            <div className="sidebar-user-role">Administrator</div>
+                        </div>
+                        <LogOut size={16} style={{ color: 'var(--gray-400)' }} />
+                    </div>
+                </div>
+            </aside>
+
+            <HelpSidebar isOpen={helpOpen} onClose={closeHelp} initialSection={initialSection} />
         </>
     );
 }
