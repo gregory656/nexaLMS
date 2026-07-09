@@ -3478,6 +3478,20 @@ h4 {
   font-size: 1.6rem;
 }
 
+.btn-super-analytics {
+  background: #061a3f;
+  border-color: #061a3f;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(6, 26, 63, 0.18);
+}
+
+.btn-super-analytics:hover,
+.btn-super-analytics.active {
+  background: #08265c;
+  border-color: #08265c;
+  color: #ffffff;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

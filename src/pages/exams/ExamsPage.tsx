@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import {
     LayoutDashboard, Settings, FileText, BarChart3, Download,
-    Plus, X, Trash2, Shuffle, BookOpen, CheckCircle, Database
+    Plus, X, Trash2, Shuffle, BookOpen, CheckCircle, Database, Sparkles
 } from 'lucide-react';
 import HelpIcon from '../../components/ui/HelpIcon';
 import { addTableToPdf, createPdfWithHeader, downloadPdf } from '../../lib/pdf';
@@ -16,6 +16,7 @@ const TABS = [
     { key: 'grades', label: 'Grade Scale', icon: BarChart3 },
     { key: 'marks', label: 'Marks Entry', icon: FileText },
     { key: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { key: 'super-analytics', label: 'Super Analytics', icon: Sparkles },
     { key: 'download', label: 'Download Centre', icon: Download },
 ];
 
@@ -34,6 +35,9 @@ export default function ExamsPage() {
     const [terms, setTerms] = useState<any[]>([]);
     const [academicYears, setAcademicYears] = useState<any[]>([]);
     const [results, setResults] = useState<any[]>([]);
+    const [departments, setDepartments] = useState<any[]>([]);
+    const [teachers, setTeachers] = useState<any[]>([]);
+    const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]);
 
     // Setup modal
     const [showSetupModal, setShowSetupModal] = useState(false);
@@ -71,7 +75,7 @@ export default function ExamsPage() {
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const [exRes, etRes, clRes, subRes, stuRes, gsRes, tRes, ayRes, resRes] = await Promise.all([
+        const [exRes, etRes, clRes, subRes, stuRes, gsRes, tRes, ayRes, resRes, deptRes, teaRes, assignRes] = await Promise.all([
             supabase.from('exams').select('*, exam_types(name), terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
             supabase.from('exam_types').select('*').eq('school_id', school.id).order('name'),
             supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
@@ -81,6 +85,9 @@ export default function ExamsPage() {
             supabase.from('terms').select('*').eq('school_id', school.id).order('term_number'),
             supabase.from('academic_years').select('*').eq('school_id', school.id).order('start_date', { ascending: false }),
             supabase.from('exam_results').select('*, students(first_name, last_name, admission_number, class_id, classes(name)), subjects(name), exams(name)').eq('school_id', school.id).limit(10000),
+            supabase.from('departments').select('*').eq('school_id', school.id).order('name'),
+            supabase.from('teachers').select('*').eq('school_id', school.id).order('first_name'),
+            supabase.from('teacher_subject_assignments').select('*').eq('school_id', school.id),
         ]);
         setExams(exRes.data || []);
         setExamTypes(etRes.data || []);
@@ -91,6 +98,9 @@ export default function ExamsPage() {
         setTerms(tRes.data || []);
         setAcademicYears(ayRes.data || []);
         setResults(resRes.data || []);
+        setDepartments(deptRes.data || []);
+        setTeachers(teaRes.data || []);
+        setTeacherAssignments(assignRes.data || []);
         setLoading(false);
     };
 
@@ -543,6 +553,11 @@ export default function ExamsPage() {
 
     const buildAdvancedAnalytics = (examId: string) => {
         const examResults = results.filter(r => r.exam_id === examId);
+        const exam = exams.find(e => e.id === examId);
+        const previousExam = exams
+            .filter(e => e.id !== examId && (!exam?.created_at || new Date(e.created_at) < new Date(exam.created_at)))
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+        const previousResults = previousExam ? results.filter(r => r.exam_id === previousExam.id) : [];
         const expectedRows = students.length * subjects.length;
         const completion = expectedRows ? Math.round((examResults.length / expectedRows) * 100) : 0;
 
@@ -554,11 +569,32 @@ export default function ExamsPage() {
         const streamMap: Record<string, any> = {};
         const teacherMap: Record<string, any> = {};
         const gradeCounts: Record<string, number> = {};
+        gradeScales.forEach(gs => { gradeCounts[gs.grade] = 0; });
 
         let boysCount = 0, girlsCount = 0;
         let boysMarks = 0, girlsMarks = 0;
         let boysPasses = 0, girlsPasses = 0;
         let totalPasses = 0;
+        let distinctionCount = 0;
+
+        const fullName = (person: any) => `${person?.first_name || ''} ${person?.last_name || ''}`.trim() || 'N/A';
+        const teacherName = (teacherId?: string) => fullName(teachers.find(t => t.id === teacherId));
+        const teacherForResult = (r: any) => {
+            if (r.teacher_id) return r.teacher_id;
+            return teacherAssignments.find(a => a.subject_id === r.subject_id && (!a.class_id || a.class_id === r.class_id))?.teacher_id;
+        };
+        const toStats = (marks: number[]) => {
+            if (!marks.length) return { median: 0, mode: 'N/A', standardDeviation: 0, range: 0 };
+            const sorted = [...marks].sort((a, b) => a - b);
+            const mid = Math.floor(sorted.length / 2);
+            const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+            const frequencies = sorted.reduce((acc, mark) => ({ ...acc, [mark]: (acc[mark] || 0) + 1 }), {} as Record<string, number>);
+            const maxFrequency = Math.max(...Object.values(frequencies));
+            const mode = maxFrequency > 1 ? Object.entries(frequencies).filter(([, count]) => count === maxFrequency).map(([mark]) => mark).join(', ') : 'N/A';
+            const mean = marks.reduce((sum, mark) => sum + mark, 0) / marks.length;
+            const standardDeviation = Math.sqrt(marks.reduce((sum, mark) => sum + Math.pow(mark - mean, 2), 0) / marks.length);
+            return { median, mode, standardDeviation, range: sorted[sorted.length - 1] - sorted[0] };
+        };
 
         examResults.forEach(r => {
             const marks = Number(r.marks || 0);
@@ -567,25 +603,31 @@ export default function ExamsPage() {
             const studentName = student ? `${student.first_name} ${student.last_name}`.trim() : 'Unknown';
             const sClass = classes.find(c => c.id === r.class_id);
             const className = sClass?.name || 'Unassigned';
-            const streamId = sClass?.stream_id;
+            const streamId = student?.stream_id || sClass?.stream_id;
+            const streamName = sClass?.streams?.name || 'N/A';
             const subject = subjects.find(s => s.id === r.subject_id);
             const subjectName = subject?.name || 'Unknown';
             const deptId = subject?.department_id;
+            const department = departments.find(d => d.id === deptId);
             const gender = student?.gender;
+            const resultTeacherId = teacherForResult(r);
 
             // Student level
-            if (!studentMap[r.student_id]) studentMap[r.student_id] = { id: r.student_id, name: studentName, className, classId: r.class_id, total: 0, count: 0, passes: 0 };
+            if (!studentMap[r.student_id]) studentMap[r.student_id] = { id: r.student_id, name: studentName, className, classId: r.class_id, streamName, total: 0, count: 0, passes: 0, subjects: [] };
             studentMap[r.student_id].total += marks;
             studentMap[r.student_id].count += 1;
             if (isPass) studentMap[r.student_id].passes += 1;
+            studentMap[r.student_id].subjects.push({ subject: subjectName, marks, grade: r.grade || getGrade(marks)?.grade || 'N/A' });
 
             // Subject level
-            if (!subjectMap[r.subject_id]) subjectMap[r.subject_id] = { id: r.subject_id, name: subjectName, total: 0, count: 0, highest: -1, lowest: 101, passes: 0 };
+            if (!subjectMap[r.subject_id]) subjectMap[r.subject_id] = { id: r.subject_id, name: subjectName, total: 0, count: 0, highest: -1, lowest: 101, passes: 0, marks: [], teachers: new Set() };
             subjectMap[r.subject_id].total += marks;
             subjectMap[r.subject_id].count += 1;
             if (marks > subjectMap[r.subject_id].highest) subjectMap[r.subject_id].highest = marks;
             if (marks < subjectMap[r.subject_id].lowest) subjectMap[r.subject_id].lowest = marks;
             if (isPass) subjectMap[r.subject_id].passes += 1;
+            subjectMap[r.subject_id].marks.push(marks);
+            if (resultTeacherId) subjectMap[r.subject_id].teachers.add(resultTeacherId);
 
             // Class level
             if (!classMap[r.class_id]) classMap[r.class_id] = { id: r.class_id, name: className, total: 0, count: 0, students: new Set(), passes: 0 };
@@ -596,24 +638,27 @@ export default function ExamsPage() {
 
             // Department level
             if (deptId) {
-                if (!departmentMap[deptId]) departmentMap[deptId] = { id: deptId, name: `Dept ${deptId.slice(0, 4)}`, total: 0, count: 0 };
+                if (!departmentMap[deptId]) departmentMap[deptId] = { id: deptId, name: department?.name || `Department ${deptId.slice(0, 4)}`, total: 0, count: 0, passes: 0 };
                 departmentMap[deptId].total += marks;
                 departmentMap[deptId].count += 1;
+                if (isPass) departmentMap[deptId].passes += 1;
             }
 
             // Stream level
             if (streamId) {
-                if (!streamMap[streamId]) streamMap[streamId] = { id: streamId, name: `Stream ${streamId.slice(0, 4)}`, total: 0, count: 0 };
+                if (!streamMap[streamId]) streamMap[streamId] = { id: streamId, name: streamName, total: 0, count: 0, passes: 0 };
                 streamMap[streamId].total += marks;
                 streamMap[streamId].count += 1;
+                if (isPass) streamMap[streamId].passes += 1;
             }
 
             // Teacher level
-            if (r.teacher_id) {
-                if (!teacherMap[r.teacher_id]) teacherMap[r.teacher_id] = { id: r.teacher_id, total: 0, count: 0, passes: 0 };
-                teacherMap[r.teacher_id].total += marks;
-                teacherMap[r.teacher_id].count += 1;
-                if (isPass) teacherMap[r.teacher_id].passes += 1;
+            if (resultTeacherId) {
+                if (!teacherMap[resultTeacherId]) teacherMap[resultTeacherId] = { id: resultTeacherId, name: teacherName(resultTeacherId), total: 0, count: 0, passes: 0, distinctions: 0 };
+                teacherMap[resultTeacherId].total += marks;
+                teacherMap[resultTeacherId].count += 1;
+                if (isPass) teacherMap[resultTeacherId].passes += 1;
+                if (marks >= 80) teacherMap[resultTeacherId].distinctions += 1;
             }
 
             // Gender level
@@ -621,6 +666,7 @@ export default function ExamsPage() {
             if (gender === 'female') { girlsCount++; girlsMarks += marks; if (isPass) girlsPasses++; }
 
             if (isPass) totalPasses++;
+            if (marks >= 80) distinctionCount++;
 
             const grade = r.grade || getGrade(marks)?.grade || 'Ungraded';
             gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
@@ -628,20 +674,52 @@ export default function ExamsPage() {
 
         // Computed Aggregations
         const computeMeans = (mapObj: Record<string, any>) => Object.values(mapObj).map(v => ({ ...v, mean: v.count ? v.total / v.count : 0 })).sort((a, b) => b.mean - a.mean);
+        const previousMeans = (key: 'student_id' | 'class_id' | 'subject_id' | 'teacher_id') => {
+            const map: Record<string, { total: number; count: number }> = {};
+            previousResults.forEach(r => {
+                const teacherId = key === 'teacher_id' ? teacherForResult(r) : null;
+                const id = teacherId || r[key];
+                if (!id) return;
+                if (!map[id]) map[id] = { total: 0, count: 0 };
+                map[id].total += Number(r.marks || 0);
+                map[id].count += 1;
+            });
+            return Object.entries(map).reduce((acc, [id, d]) => ({ ...acc, [id]: d.count ? d.total / d.count : 0 }), {} as Record<string, number>);
+        };
+        const withMovement = (items: any[], prev: Record<string, number>) => items.map(item => ({
+            ...item,
+            previousMean: prev[item.id],
+            improvement: typeof prev[item.id] === 'number' ? item.mean - prev[item.id] : null,
+        }));
 
-        const ranked = computeMeans(studentMap);
-        const subjectsRanked = computeMeans(subjectMap);
-        const classesRanked = computeMeans(classMap).map(c => ({ ...c, studentCount: c.students.size }));
+        const ranked = withMovement(computeMeans(studentMap), previousMeans('student_id'));
+        const subjectsRanked = withMovement(computeMeans(subjectMap).map(s => ({ ...s, ...toStats(s.marks), teachers: Array.from(s.teachers || []).map(id => teacherName(String(id))).join(', ') || 'N/A' })), previousMeans('subject_id'));
+        const classesRanked = withMovement(computeMeans(classMap).map(c => ({ ...c, studentCount: c.students.size })), previousMeans('class_id'));
         const departmentsRanked = computeMeans(departmentMap);
         const streamsRanked = computeMeans(streamMap);
-        const teachersRanked = computeMeans(teacherMap);
+        const teachersRanked = withMovement(computeMeans(teacherMap), previousMeans('teacher_id'));
 
         const overallMean = examResults.length ? examResults.reduce((sum, r) => sum + Number(r.marks || 0), 0) / examResults.length : 0;
         const passRate = examResults.length ? (totalPasses / examResults.length) * 100 : 0;
+        const failRate = 100 - passRate;
+        const distinctionRate = examResults.length ? (distinctionCount / examResults.length) * 100 : 0;
         const weakSubjects = subjectsRanked.slice().sort((a, b) => a.mean - b.mean).slice(0, 3);
+        const topStudents = ranked.slice(0, 100);
+        const bottomStudents = ranked.slice().sort((a, b) => a.mean - b.mean).slice(0, 100);
+        const mostImprovedStudents = ranked.filter(s => s.improvement !== null && s.improvement > 0).sort((a, b) => b.improvement - a.improvement).slice(0, 10);
+        const biggestDeclineStudents = ranked.filter(s => s.improvement !== null && s.improvement < 0).sort((a, b) => a.improvement - b.improvement).slice(0, 10);
+        const mostImprovedClasses = classesRanked.filter(c => c.improvement !== null).sort((a, b) => (b.improvement || 0) - (a.improvement || 0)).slice(0, 5);
+        const mostImprovedSubjects = subjectsRanked.filter(s => s.improvement !== null).sort((a, b) => (b.improvement || 0) - (a.improvement || 0)).slice(0, 5);
+        const mostImprovedTeachers = teachersRanked.filter(t => t.improvement !== null).sort((a, b) => (b.improvement || 0) - (a.improvement || 0)).slice(0, 5);
+        const atRiskStudents = ranked.filter(s => s.mean < 40 || s.passes < Math.ceil(s.count / 2)).slice(0, 25);
+        const straightAStudents = ranked.filter(s => s.subjects.length && s.subjects.every((sub: any) => String(sub.grade).toUpperCase().startsWith('A')));
+        const allPassStudents = ranked.filter(s => s.count && s.passes === s.count);
+        const failingMultipleSubjects = ranked.filter(s => (s.count - s.passes) >= 2);
 
         const boysMean = boysCount ? boysMarks / boysCount : 0;
         const girlsMean = girlsCount ? girlsMarks / girlsCount : 0;
+        const boys = ranked.filter(s => students.find(st => st.id === s.id)?.gender === 'male');
+        const girls = ranked.filter(s => students.find(st => st.id === s.id)?.gender === 'female');
         const genderResults = {
             boysMean,
             girlsMean,
@@ -649,6 +727,10 @@ export default function ExamsPage() {
             girlsCount,
             boysPassRate: boysCount ? (boysPasses / boysCount) * 100 : 0,
             girlsPassRate: girlsCount ? (girlsPasses / girlsCount) * 100 : 0,
+            bestBoy: boys[0]?.name || 'N/A',
+            bestGirl: girls[0]?.name || 'N/A',
+            topBoys: boys.slice(0, 10),
+            topGirls: girls.slice(0, 10),
         };
 
         const coverage = classes.flatMap(cls => subjects.map(subject => {
@@ -664,7 +746,28 @@ export default function ExamsPage() {
         return {
             examResults, expectedRows, completion, ranked, subjectsRanked,
             classesRanked, departmentsRanked, streamsRanked, teachersRanked,
-            gradeCounts, overallMean, passRate, weakSubjects, coverage, genderResults
+            gradeCounts, overallMean, passRate, failRate, distinctionRate, weakSubjects, coverage, genderResults,
+            previousExamName: previousExam?.name || 'N/A',
+            bestSubject: subjectsRanked[0]?.name || 'N/A',
+            mostDifficultSubject: weakSubjects[0]?.name || 'N/A',
+            bestClass: classesRanked[0]?.name || 'N/A',
+            lowestClass: classesRanked.slice().sort((a, b) => a.mean - b.mean)[0]?.name || 'N/A',
+            bestDepartment: departmentsRanked[0]?.name || 'N/A',
+            lowestDepartment: departmentsRanked.slice().sort((a, b) => a.mean - b.mean)[0]?.name || 'N/A',
+            topStudents,
+            bottomStudents,
+            mostImprovedStudents,
+            biggestDeclineStudents,
+            mostImprovedClasses,
+            mostImprovedSubjects,
+            mostImprovedTeachers,
+            atRiskStudents,
+            straightAStudents,
+            allPassStudents,
+            failingMultipleSubjects,
+            targetAnalysis: [['Students Meeting Target', 'N/A'], ['Students Below Target', 'N/A'], ['Subjects Meeting Target', 'N/A'], ['Teachers Meeting Target', 'N/A'], ['Classes Meeting Target', 'N/A'], ['Departments Meeting Target', 'N/A']],
+            jointAnalysis: [['Overall Joint School Position', 'N/A'], ['Best Performing School', 'N/A'], ['Lowest Performing School', 'N/A'], ['School vs Joint Average', 'N/A'], ['Highest Improved School', 'N/A'], ['Most Consistent School', 'N/A']],
+            attendanceAnalysis: [['Attendance Rate During Exams', 'N/A'], ['Perfect Attendance + High Performance', 'N/A'], ['Missed Lessons', 'N/A'], ['Exam Attendance', 'N/A']],
         };
     };
 
@@ -678,7 +781,7 @@ export default function ExamsPage() {
         return (
             <>
                 <div className="flex justify-between items-center mb-4">
-                    <div><h3 className="text-lg font-bold">Exam Analytics Command Centre</h3><p className="text-sm text-muted">Advanced multidimensional analytics engine.</p></div>
+                    <div><h3 className="text-lg font-bold">Super Analytics Command Centre</h3><p className="text-sm text-muted">Decision-support analytics for awards, interventions, departments, teachers, classes, subjects, and students.</p></div>
                     <select className="form-select" style={{ width: 'auto', minWidth: 240 }} value={selectedExam} onChange={e => setSelectedExam(e.target.value)}>
                         <option value="">Latest Exam</option>
                         {exams.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
@@ -691,7 +794,7 @@ export default function ExamsPage() {
                     { key: 'subject', label: 'Subjects & Departments' },
                     { key: 'trs', label: 'Teachers' },
                     { key: 'gender', label: 'Gender & Demographics' },
-                    { key: 'individual', label: 'Top Students' }].map(tab => (
+                    { key: 'individual', label: 'Students & Lists' }].map(tab => (
                         <button key={tab.key} onClick={() => setAnalyticsTab(tab.key as any)} className={`analytics-tab ${analyticsTab === tab.key ? 'active' : ''}`}>{tab.label}</button>
                     ))}
                 </div>
@@ -702,7 +805,7 @@ export default function ExamsPage() {
                         <h4 className="text-blue-800 font-bold mb-1">Database Snapshot Active (Notice to Exam Officers)</h4>
                         <p className="text-sm text-blue-700">
                             This multi-level analytics engine is directly linked to the immutable <strong>exam_analytics_snapshots</strong>
-                            table within your school's secure Supabase database. These insights are structurally isolated and locked
+                            table within your school's secure database. These insights are structurally isolated and locked
                             at the exact time the exam is published, ensuring that structural data modifications over time do not alter
                             historical report performance, guaranteeing decision-support integrity.
                         </p>
@@ -720,6 +823,7 @@ export default function ExamsPage() {
                                         <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">School Mean</span><div className="kpi-icon bg-blue-100 text-blue-600"><BarChart3 size={18} /></div></div><div className="kpi-value">{analytics.overallMean.toFixed(2)}</div><div className="kpi-sub">Out of 100</div></div>
                                         <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Pass Rate</span><div className="kpi-icon bg-green-100 text-green-600"><CheckCircle size={18} /></div></div><div className="kpi-value">{analytics.passRate.toFixed(1)}%</div><div className="kpi-sub">Achieved pass mark</div></div>
                                         <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Completion</span><div className="kpi-icon bg-orange-100 text-orange-600"><FileText size={18} /></div></div><div className="kpi-value">{analytics.completion}%</div><div className="kpi-sub">{analytics.examResults.length} marks keyed</div></div>
+                                        <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Distinction Rate</span><div className="kpi-icon bg-purple-100 text-purple-600"><Sparkles size={18} /></div></div><div className="kpi-value">{analytics.distinctionRate.toFixed(1)}%</div><div className="kpi-sub">80 marks and above</div></div>
                                     </div>
 
                                     <div className="analytics-grid">
@@ -768,6 +872,27 @@ export default function ExamsPage() {
                                             </table>
                                         </div>
                                     </div>
+
+                                    <div className="analytics-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Decision Summary</div>
+                                            <div className="table-wrapper"><table className="data-table"><tbody>
+                                                <tr><td>Previous Exam</td><td><strong>{analytics.previousExamName}</strong></td></tr>
+                                                <tr><td>Best Subject Overall</td><td><strong>{analytics.bestSubject}</strong></td></tr>
+                                                <tr><td>Most Difficult Subject</td><td><strong>{analytics.mostDifficultSubject}</strong></td></tr>
+                                                <tr><td>Best Performing Class</td><td><strong>{analytics.bestClass}</strong></td></tr>
+                                                <tr><td>Lowest Performing Class</td><td><strong>{analytics.lowestClass}</strong></td></tr>
+                                                <tr><td>Best Department</td><td><strong>{analytics.bestDepartment}</strong></td></tr>
+                                                <tr><td>Lowest Department</td><td><strong>{analytics.lowestDepartment}</strong></td></tr>
+                                            </tbody></table></div>
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Joint School Analysis</div>
+                                            <div className="table-wrapper"><table className="data-table"><tbody>
+                                                {analytics.jointAnalysis.map(([metric, value]) => <tr key={metric}><td>{metric}</td><td><strong>{value}</strong></td></tr>)}
+                                            </tbody></table></div>
+                                        </div>
+                                    </div>
                                 </>
                             )}
 
@@ -793,7 +918,7 @@ export default function ExamsPage() {
                                             <div className="mini-leaderboard">
                                                 {analytics.streamsRanked.map(stream => (
                                                     <div className="mini-lead-row" key={stream.id}>
-                                                        <div className="mini-lead-left"><div className="mini-lead-name">{stream.name}</div></div>
+                                                        <div className="mini-lead-left"><div className="mini-lead-name">{stream.name}</div><div className="mini-lead-sub">{stream.count} entries</div></div>
                                                         <div className="mini-lead-score">{stream.mean.toFixed(2)}</div>
                                                     </div>
                                                 ))}
@@ -807,13 +932,17 @@ export default function ExamsPage() {
                                 <div className="analytics-grid">
                                     <div className="panel">
                                         <div className="panel-title">Full Subject Analysis (Level 4)</div>
-                                        <div className="table-wrapper"><table className="data-table text-sm"><thead><tr><th>Subject</th><th>Mean</th><th>High/Low</th><th>Pass Rate</th></tr></thead><tbody>
+                                        <div className="table-wrapper"><table className="data-table text-sm"><thead><tr><th>Subject</th><th>Mean</th><th>Median</th><th>Mode</th><th>Std Dev</th><th>High/Low</th><th>Pass Rate</th><th>Teacher</th></tr></thead><tbody>
                                             {analytics.subjectsRanked.map(s => (
                                                 <tr key={s.id}>
                                                     <td><strong>{s.name}</strong></td>
                                                     <td>{s.mean.toFixed(2)}</td>
+                                                    <td>{s.median.toFixed(1)}</td>
+                                                    <td>{s.mode}</td>
+                                                    <td>{s.standardDeviation.toFixed(1)}</td>
                                                     <td><span className="text-success">{s.highest.toFixed(0)}</span> / <span className="text-danger">{s.lowest === 101 ? '-' : s.lowest.toFixed(0)}</span></td>
                                                     <td>{s.count ? ((s.passes / s.count) * 100).toFixed(0) : 0}%</td>
+                                                    <td>{s.teachers}</td>
                                                 </tr>
                                             ))}
                                         </tbody></table></div>
@@ -838,14 +967,16 @@ export default function ExamsPage() {
                                 <div className="panel">
                                     <div className="panel-title">Teacher Value Add (Level 5)</div>
                                     {analytics.teachersRanked.length ? (
-                                        <div className="table-wrapper"><table className="data-table"><thead><tr><th>Teacher ID</th><th>Total Marks Keyed</th><th>Candidates</th><th>Mean Score</th><th>Pass Rate</th></tr></thead><tbody>
+                                        <div className="table-wrapper"><table className="data-table"><thead><tr><th>Teacher</th><th>Candidates</th><th>Mean Score</th><th>Pass Rate</th><th>Distinction Rate</th><th>Improvement</th><th>Recognition</th></tr></thead><tbody>
                                             {analytics.teachersRanked.map(t => (
                                                 <tr key={t.id}>
-                                                    <td>{t.id.slice(0, 8)}...</td>
-                                                    <td>{t.total}</td>
+                                                    <td><strong>{t.name}</strong></td>
                                                     <td>{t.count}</td>
                                                     <td><strong>{t.mean.toFixed(2)}</strong></td>
                                                     <td>{t.count ? ((t.passes / t.count) * 100).toFixed(0) : 0}%</td>
+                                                    <td>{t.count ? ((t.distinctions / t.count) * 100).toFixed(0) : 0}%</td>
+                                                    <td>{t.improvement === null ? 'N/A' : t.improvement.toFixed(1)}</td>
+                                                    <td>{analytics.teachersRanked[0]?.id === t.id ? 'Best Teacher' : analytics.mostImprovedTeachers[0]?.id === t.id ? 'Most Improved' : 'N/A'}</td>
                                                 </tr>
                                             ))}
                                         </tbody></table></div>
@@ -871,19 +1002,59 @@ export default function ExamsPage() {
                                                 <div className="text-xs text-pink-500 mt-2">{analytics.genderResults.girlsCount} entries</div>
                                             </div>
                                         </div>
+                                        <div className="table-wrapper mt-4"><table className="data-table"><tbody>
+                                            <tr><td>Best Boy</td><td><strong>{analytics.genderResults.bestBoy}</strong></td></tr>
+                                            <tr><td>Best Girl</td><td><strong>{analytics.genderResults.bestGirl}</strong></td></tr>
+                                            <tr><td>Top 10 Boys</td><td>{analytics.genderResults.topBoys.length ? analytics.genderResults.topBoys.map(s => s.name).join(', ') : 'N/A'}</td></tr>
+                                            <tr><td>Top 10 Girls</td><td>{analytics.genderResults.topGirls.length ? analytics.genderResults.topGirls.map(s => s.name).join(', ') : 'N/A'}</td></tr>
+                                        </tbody></table></div>
                                     </div>
                                 </div>
                             )}
 
                             {analyticsTab === 'individual' && (
-                                <div className="panel">
-                                    <div className="panel-title">Top 100 Students (Level 8 & 13)</div>
-                                    <div className="table-wrapper"><table className="data-table"><thead><tr><th>Rank</th><th>Student</th><th>Class</th><th>Total Marks</th><th>Mean Score</th><th>Passes</th><th>Grade</th></tr></thead><tbody>
-                                        {analytics.ranked.slice(0, 100).map((s, i) => {
+                                <div className="grid" style={{ gap: '1rem' }}>
+                                    <div className="panel">
+                                        <div className="panel-title">Top 100 Students (Level 8 & 13)</div>
+                                        <div className="table-wrapper"><table className="data-table"><thead><tr><th>Rank</th><th>Student</th><th>Class</th><th>Total Marks</th><th>Mean Score</th><th>Passes</th><th>Improvement</th><th>Grade</th></tr></thead><tbody>
+                                        {analytics.topStudents.map((s, i) => {
                                             const gs = getGrade(s.mean);
-                                            return <tr key={s.id}><td><strong className={i < 3 ? 'text-success' : ''}>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(2)}</td><td>{s.passes}/{s.count}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td></tr>;
+                                            return <tr key={s.id}><td><strong className={i < 3 ? 'text-success' : ''}>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(2)}</td><td>{s.passes}/{s.count}</td><td>{s.improvement === null ? 'N/A' : s.improvement.toFixed(1)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td></tr>;
                                         })}
-                                    </tbody></table></div>
+                                        </tbody></table></div>
+                                    </div>
+                                    <div className="analytics-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Improvement Analysis</div>
+                                            <div className="table-wrapper"><table className="data-table"><tbody>
+                                                <tr><td>Most Improved Student</td><td><strong>{analytics.mostImprovedStudents[0]?.name || 'N/A'}</strong></td></tr>
+                                                <tr><td>Most Improved Class</td><td><strong>{analytics.mostImprovedClasses[0]?.name || 'N/A'}</strong></td></tr>
+                                                <tr><td>Most Improved Subject</td><td><strong>{analytics.mostImprovedSubjects[0]?.name || 'N/A'}</strong></td></tr>
+                                                <tr><td>Most Improved Teacher</td><td><strong>{analytics.mostImprovedTeachers[0]?.name || 'N/A'}</strong></td></tr>
+                                                <tr><td>Biggest Decline Student</td><td><strong>{analytics.biggestDeclineStudents[0]?.name || 'N/A'}</strong></td></tr>
+                                            </tbody></table></div>
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Special Lists</div>
+                                            <div className="table-wrapper"><table className="data-table"><tbody>
+                                                <tr><td>Straight A</td><td>{analytics.straightAStudents.length || 'N/A'}</td></tr>
+                                                <tr><td>All Passes</td><td>{analytics.allPassStudents.length || 'N/A'}</td></tr>
+                                                <tr><td>Failing Multiple Subjects</td><td>{analytics.failingMultipleSubjects.length || 'N/A'}</td></tr>
+                                                <tr><td>At-Risk Students</td><td>{analytics.atRiskStudents.length || 'N/A'}</td></tr>
+                                                <tr><td>Bottom 100 Available</td><td>{analytics.bottomStudents.length || 'N/A'}</td></tr>
+                                            </tbody></table></div>
+                                        </div>
+                                    </div>
+                                    <div className="analytics-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Target Analysis</div>
+                                            <div className="table-wrapper"><table className="data-table"><tbody>{analytics.targetAnalysis.map(([metric, value]) => <tr key={metric}><td>{metric}</td><td><strong>{value}</strong></td></tr>)}</tbody></table></div>
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Attendance Analysis</div>
+                                            <div className="table-wrapper"><table className="data-table"><tbody>{analytics.attendanceAnalysis.map(([metric, value]) => <tr key={metric}><td>{metric}</td><td><strong>{value}</strong></td></tr>)}</tbody></table></div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </>
@@ -936,7 +1107,7 @@ export default function ExamsPage() {
             } else {
                 const examName = exams.find(ex => ex.id === dlExam)?.name || 'Exam';
                 const doc = await createPdfWithHeader({
-                    title: 'Examination Analytics Report',
+                    title: 'Super Analytics Decision Report',
                     subtitle: `${examName} | Mean ${analytics.overallMean.toFixed(1)} | Completion ${analytics.completion}%`,
                     schoolName: school?.name || 'School',
                     schoolMotto: school?.motto,
@@ -944,17 +1115,71 @@ export default function ExamsPage() {
                     watermarkUrl: school?.watermark_url,
                     orientation: 'landscape',
                 });
+                const nextY = () => ((doc as any).lastAutoTable?.finalY || (doc as any).__contentStartY || 40) + 8;
+                const fallbackRows = (rows: any[][], cols: number) => rows.length ? rows : [Array.from({ length: cols }, (_, i) => i === 0 ? 'N/A' : '')];
                 addTableToPdf(doc, ['Metric', 'Value'], [
                     ['School Mean', analytics.overallMean.toFixed(1)],
+                    ['School Mean Grade', getGrade(analytics.overallMean)?.grade || 'N/A'],
+                    ['Pass Rate', `${analytics.passRate.toFixed(1)}%`],
+                    ['Fail Rate', `${analytics.failRate.toFixed(1)}%`],
+                    ['Distinction Rate', `${analytics.distinctionRate.toFixed(1)}%`],
                     ['Marks Entered', String(analytics.examResults.length)],
                     ['Expected Rows', String(analytics.expectedRows)],
                     ['Completion', `${analytics.completion}%`],
                     ['Top Student', analytics.ranked[0]?.name || 'N/A'],
+                    ['Bottom Student', analytics.bottomStudents[0]?.name || 'N/A'],
+                    ['Best Subject Overall', analytics.bestSubject],
+                    ['Most Difficult Subject', analytics.mostDifficultSubject],
+                    ['Best Class', analytics.bestClass],
+                    ['Lowest Class', analytics.lowestClass],
+                    ['Best Department', analytics.bestDepartment],
+                    ['Lowest Department', analytics.lowestDepartment],
+                    ['Previous Exam Comparison', analytics.previousExamName],
                 ]);
-                addTableToPdf(doc, ['Subject', 'Mean', 'Entries'], analytics.subjectsRanked.map(s => [s.name, s.mean.toFixed(1), String(s.count)]), (doc as any).lastAutoTable.finalY + 8);
-                addTableToPdf(doc, ['Student', 'Adm No.', 'Class', 'Subject', 'Marks', 'Grade'], rows.slice(0, 120), (doc as any).lastAutoTable.finalY + 8);
-                downloadPdf(doc, `exam_analytics_${dlScope}_${Date.now()}`);
-                toast.success('Analytics PDF downloaded');
+                addTableToPdf(doc, ['Joint School Metric', 'Value'], analytics.jointAnalysis, nextY());
+                addTableToPdf(doc, ['Grade', 'Count', 'Percentage'], Object.entries(analytics.gradeCounts).map(([grade, count]) => [grade, String(count), `${((count / Math.max(analytics.examResults.length, 1)) * 100).toFixed(1)}%`]), nextY());
+                addTableToPdf(doc, ['Subject', 'Mean', 'Median', 'Mode', 'Std Dev', 'Range', 'Highest', 'Lowest', 'Pass Rate', 'Teacher'], fallbackRows(analytics.subjectsRanked.map(s => [s.name, s.mean.toFixed(1), s.median.toFixed(1), s.mode, s.standardDeviation.toFixed(1), s.range.toFixed(1), String(s.highest), s.lowest === 101 ? 'N/A' : String(s.lowest), `${s.count ? ((s.passes / s.count) * 100).toFixed(1) : 0}%`, s.teachers]), 10), nextY());
+                addTableToPdf(doc, ['Department', 'Mean', 'Entries', 'Pass Rate'], fallbackRows(analytics.departmentsRanked.map(d => [d.name, d.mean.toFixed(1), String(d.count), `${d.count ? ((d.passes / d.count) * 100).toFixed(1) : 0}%`]), 4), nextY());
+                addTableToPdf(doc, ['Teacher', 'Candidates', 'Mean', 'Pass Rate', 'Distinction Rate', 'Improvement', 'Recognition'], fallbackRows(analytics.teachersRanked.map(t => [t.name, String(t.count), t.mean.toFixed(1), `${t.count ? ((t.passes / t.count) * 100).toFixed(1) : 0}%`, `${t.count ? ((t.distinctions / t.count) * 100).toFixed(1) : 0}%`, t.improvement === null ? 'N/A' : t.improvement.toFixed(1), analytics.teachersRanked[0]?.id === t.id ? 'Best Teacher' : analytics.mostImprovedTeachers[0]?.id === t.id ? 'Most Improved' : 'N/A']), 7), nextY());
+                addTableToPdf(doc, ['Class', 'Mean', 'Candidates', 'Pass Rate', 'Improvement'], fallbackRows(analytics.classesRanked.map(c => [c.name, c.mean.toFixed(1), String(c.studentCount), `${c.count ? ((c.passes / c.count) * 100).toFixed(1) : 0}%`, c.improvement === null ? 'N/A' : c.improvement.toFixed(1)]), 5), nextY());
+                addTableToPdf(doc, ['Stream', 'Mean', 'Entries', 'Pass Rate'], fallbackRows(analytics.streamsRanked.map(s => [s.name, s.mean.toFixed(1), String(s.count), `${s.count ? ((s.passes / s.count) * 100).toFixed(1) : 0}%`]), 4), nextY());
+                addTableToPdf(doc, ['Gender Metric', 'Value'], [
+                    ['Boys Mean', analytics.genderResults.boysCount ? analytics.genderResults.boysMean.toFixed(1) : 'N/A'],
+                    ['Girls Mean', analytics.genderResults.girlsCount ? analytics.genderResults.girlsMean.toFixed(1) : 'N/A'],
+                    ['Best Boy', analytics.genderResults.bestBoy],
+                    ['Best Girl', analytics.genderResults.bestGirl],
+                    ['Top 10 Boys', analytics.genderResults.topBoys.length ? analytics.genderResults.topBoys.map(s => s.name).join(', ') : 'N/A'],
+                    ['Top 10 Girls', analytics.genderResults.topGirls.length ? analytics.genderResults.topGirls.map(s => s.name).join(', ') : 'N/A'],
+                ], nextY());
+                addTableToPdf(doc, ['Rank', 'Student', 'Class', 'Total', 'Mean', 'Grade', 'Improvement'], fallbackRows(analytics.topStudents.map((s, i) => [String(i + 1), s.name, s.className, s.total.toFixed(0), s.mean.toFixed(1), getGrade(s.mean)?.grade || 'N/A', s.improvement === null ? 'N/A' : s.improvement.toFixed(1)]), 7), nextY());
+                addTableToPdf(doc, ['Rank', 'Student', 'Class', 'Total', 'Mean', 'Grade'], fallbackRows(analytics.bottomStudents.map((s, i) => [String(i + 1), s.name, s.className, s.total.toFixed(0), s.mean.toFixed(1), getGrade(s.mean)?.grade || 'N/A']), 6), nextY());
+                addTableToPdf(doc, ['Improvement Metric', 'Value'], [
+                    ['Most Improved Student', analytics.mostImprovedStudents[0]?.name || 'N/A'],
+                    ['Most Improved Class', analytics.mostImprovedClasses[0]?.name || 'N/A'],
+                    ['Most Improved Subject', analytics.mostImprovedSubjects[0]?.name || 'N/A'],
+                    ['Most Improved Teacher', analytics.mostImprovedTeachers[0]?.name || 'N/A'],
+                    ['Most Improved Stream', 'N/A'],
+                    ['Most Improved Department', 'N/A'],
+                    ['Most Improved School (Joint)', 'N/A'],
+                    ['Biggest Decline Student', analytics.biggestDeclineStudents[0]?.name || 'N/A'],
+                    ['Biggest Decline Class', analytics.mostImprovedClasses.slice().sort((a, b) => (a.improvement || 0) - (b.improvement || 0))[0]?.name || 'N/A'],
+                ], nextY());
+                addTableToPdf(doc, ['Target Metric', 'Value'], analytics.targetAnalysis, nextY());
+                addTableToPdf(doc, ['Attendance Metric', 'Value'], analytics.attendanceAnalysis, nextY());
+                addTableToPdf(doc, ['Special List', 'Value'], [
+                    ['Top 10', analytics.topStudents.slice(0, 10).map(s => s.name).join(', ') || 'N/A'],
+                    ['Top 50 Count', String(analytics.topStudents.slice(0, 50).length || 'N/A')],
+                    ['Top 100 Count', String(analytics.topStudents.length || 'N/A')],
+                    ['Bottom 10', analytics.bottomStudents.slice(0, 10).map(s => s.name).join(', ') || 'N/A'],
+                    ['Straight A Students', analytics.straightAStudents.map(s => s.name).join(', ') || 'N/A'],
+                    ['All Passes', analytics.allPassStudents.map(s => s.name).join(', ') || 'N/A'],
+                    ['Failing Multiple Subjects', analytics.failingMultipleSubjects.map(s => s.name).join(', ') || 'N/A'],
+                    ['Perfect Attendance + High Performance', 'N/A'],
+                    ['At-Risk Students', analytics.atRiskStudents.map(s => s.name).join(', ') || 'N/A'],
+                ], nextY());
+                addTableToPdf(doc, ['Student', 'Adm No.', 'Class', 'Subject', 'Marks', 'Grade'], rows.slice(0, 120), nextY());
+                downloadPdf(doc, `super_analytics_${dlScope}_${Date.now()}`);
+                toast.success('Super analytics PDF downloaded');
             }
         } catch (err: any) {
             toast.error('Download failed: ' + err.message);
@@ -1060,7 +1285,7 @@ export default function ExamsPage() {
                     {TABS.map(tab => (
                         <button
                             key={tab.key}
-                            className={`btn btn-sm ${activeTab === tab.key ? 'btn-primary' : 'btn-ghost'}`}
+                            className={`btn btn-sm ${tab.key === 'super-analytics' ? 'btn-super-analytics' : activeTab === tab.key ? 'btn-primary' : 'btn-ghost'} ${tab.key === 'super-analytics' && activeTab === tab.key ? 'active' : ''}`}
                             onClick={() => setActiveTab(tab.key)}
                             style={{ whiteSpace: 'nowrap' }}
                         >
@@ -1078,7 +1303,8 @@ export default function ExamsPage() {
                     {activeTab === 'setup' && renderSetup()}
                     {activeTab === 'grades' && renderGrades()}
                     {activeTab === 'marks' && renderMarks()}
-                    {activeTab === 'analytics' && renderAdvancedAnalytics()}
+                    {activeTab === 'analytics' && renderAnalytics()}
+                    {activeTab === 'super-analytics' && renderAdvancedAnalytics()}
                     {activeTab === 'download' && renderAdvancedDownload()}
                 </>
             )}

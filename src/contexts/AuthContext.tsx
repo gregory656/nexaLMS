@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
-        // CAUGHT IT: Supabase's getSession() strips the hash fragment from the URL.
+        // CAUGHT IT: the auth client's getSession() strips the hash fragment from the URL.
         // We MUST intercept it synchronously on mount, before any auth logic runs.
         const hash = window.location.hash;
         const currentPath = window.location.pathname;
