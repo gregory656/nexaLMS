@@ -119,16 +119,7 @@ export default function SitePage() {
                     </section>
                 )}
 
-                {activePage.slug === 'contact' && (
-                    <section className="site-band site-band-soft">
-                        <div className="site-contact-strip">
-                            <div><strong>M-PESA</strong><span>0719637416</span></div>
-                            <div><strong>Paybill</strong><span>522522</span></div>
-                            <div><strong>Account</strong><span>1339185296</span></div>
-                            <div><strong>Bank</strong><span>1339185396</span></div>
-                        </div>
-                    </section>
-                )}
+
             </>
         );
     };

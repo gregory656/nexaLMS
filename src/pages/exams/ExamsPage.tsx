@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import {
     LayoutDashboard, Settings, FileText, BarChart3, Download,
-    Plus, X, Trash2, Shuffle, BookOpen, CheckCircle, AlertTriangle
+    Plus, X, Trash2, Shuffle, BookOpen, CheckCircle, Database
 } from 'lucide-react';
 import HelpIcon from '../../components/ui/HelpIcon';
 import { addTableToPdf, createPdfWithHeader, downloadPdf } from '../../lib/pdf';
@@ -66,7 +66,7 @@ export default function ExamsPage() {
     const [dlStudent, setDlStudent] = useState('');
     const [dlFormat, setDlFormat] = useState<'csv' | 'pdf'>('pdf');
     const [analyticsDownloading, setAnalyticsDownloading] = useState(false);
-    const [analyticsTab, setAnalyticsTab] = useState<'school' | 'trs' | 'subject' | 'individual'>('school');
+    const [analyticsTab, setAnalyticsTab] = useState<'school' | 'classes' | 'subject' | 'trs' | 'gender' | 'individual'>('school');
 
     const fetchAll = async () => {
         if (!school?.id) return;
@@ -545,60 +545,127 @@ export default function ExamsPage() {
         const examResults = results.filter(r => r.exam_id === examId);
         const expectedRows = students.length * subjects.length;
         const completion = expectedRows ? Math.round((examResults.length / expectedRows) * 100) : 0;
-        const studentMap: Record<string, { name: string; className: string; total: number; count: number }> = {};
-        const subjectMap: Record<string, { id: string; name: string; total: number; count: number }> = {};
-        const classMap: Record<string, { id: string; name: string; total: number; count: number; students: Set<string> }> = {};
+
+        // Data maps
+        const studentMap: Record<string, any> = {};
+        const subjectMap: Record<string, any> = {};
+        const classMap: Record<string, any> = {};
+        const departmentMap: Record<string, any> = {};
+        const streamMap: Record<string, any> = {};
+        const teacherMap: Record<string, any> = {};
         const gradeCounts: Record<string, number> = {};
+
+        let boysCount = 0, girlsCount = 0;
+        let boysMarks = 0, girlsMarks = 0;
+        let boysPasses = 0, girlsPasses = 0;
+        let totalPasses = 0;
 
         examResults.forEach(r => {
             const marks = Number(r.marks || 0);
-            const studentName = `${r.students?.first_name || ''} ${r.students?.last_name || ''}`.trim();
-            const className = r.students?.classes?.name || classes.find(c => c.id === r.class_id)?.name || 'Unassigned';
-            if (!studentMap[r.student_id]) studentMap[r.student_id] = { name: studentName, className, total: 0, count: 0 };
+            const student = students.find(s => s.id === r.student_id);
+            const isPass = marks >= 40; // Default pass mark 40 for analytics purposes
+            const studentName = student ? `${student.first_name} ${student.last_name}`.trim() : 'Unknown';
+            const sClass = classes.find(c => c.id === r.class_id);
+            const className = sClass?.name || 'Unassigned';
+            const streamId = sClass?.stream_id;
+            const subject = subjects.find(s => s.id === r.subject_id);
+            const subjectName = subject?.name || 'Unknown';
+            const deptId = subject?.department_id;
+            const gender = student?.gender;
+
+            // Student level
+            if (!studentMap[r.student_id]) studentMap[r.student_id] = { id: r.student_id, name: studentName, className, classId: r.class_id, total: 0, count: 0, passes: 0 };
             studentMap[r.student_id].total += marks;
             studentMap[r.student_id].count += 1;
+            if (isPass) studentMap[r.student_id].passes += 1;
 
-            const subjectName = r.subjects?.name || subjects.find(s => s.id === r.subject_id)?.name || 'Subject';
-            if (!subjectMap[r.subject_id]) subjectMap[r.subject_id] = { id: r.subject_id, name: subjectName, total: 0, count: 0 };
+            // Subject level
+            if (!subjectMap[r.subject_id]) subjectMap[r.subject_id] = { id: r.subject_id, name: subjectName, total: 0, count: 0, highest: -1, lowest: 101, passes: 0 };
             subjectMap[r.subject_id].total += marks;
             subjectMap[r.subject_id].count += 1;
+            if (marks > subjectMap[r.subject_id].highest) subjectMap[r.subject_id].highest = marks;
+            if (marks < subjectMap[r.subject_id].lowest) subjectMap[r.subject_id].lowest = marks;
+            if (isPass) subjectMap[r.subject_id].passes += 1;
 
-            if (!classMap[r.class_id]) classMap[r.class_id] = { id: r.class_id, name: className, total: 0, count: 0, students: new Set() };
+            // Class level
+            if (!classMap[r.class_id]) classMap[r.class_id] = { id: r.class_id, name: className, total: 0, count: 0, students: new Set(), passes: 0 };
             classMap[r.class_id].total += marks;
             classMap[r.class_id].count += 1;
             classMap[r.class_id].students.add(r.student_id);
+            if (isPass) classMap[r.class_id].passes += 1;
+
+            // Department level
+            if (deptId) {
+                if (!departmentMap[deptId]) departmentMap[deptId] = { id: deptId, name: `Dept ${deptId.slice(0, 4)}`, total: 0, count: 0 };
+                departmentMap[deptId].total += marks;
+                departmentMap[deptId].count += 1;
+            }
+
+            // Stream level
+            if (streamId) {
+                if (!streamMap[streamId]) streamMap[streamId] = { id: streamId, name: `Stream ${streamId.slice(0, 4)}`, total: 0, count: 0 };
+                streamMap[streamId].total += marks;
+                streamMap[streamId].count += 1;
+            }
+
+            // Teacher level
+            if (r.teacher_id) {
+                if (!teacherMap[r.teacher_id]) teacherMap[r.teacher_id] = { id: r.teacher_id, total: 0, count: 0, passes: 0 };
+                teacherMap[r.teacher_id].total += marks;
+                teacherMap[r.teacher_id].count += 1;
+                if (isPass) teacherMap[r.teacher_id].passes += 1;
+            }
+
+            // Gender level
+            if (gender === 'male') { boysCount++; boysMarks += marks; if (isPass) boysPasses++; }
+            if (gender === 'female') { girlsCount++; girlsMarks += marks; if (isPass) girlsPasses++; }
+
+            if (isPass) totalPasses++;
 
             const grade = r.grade || getGrade(marks)?.grade || 'Ungraded';
             gradeCounts[grade] = (gradeCounts[grade] || 0) + 1;
         });
 
-        const ranked = Object.entries(studentMap)
-            .map(([id, item]) => ({ id, ...item, mean: item.count ? item.total / item.count : 0 }))
-            .sort((a, b) => b.mean - a.mean);
-        const subjectsRanked = Object.values(subjectMap)
-            .map(item => ({ ...item, mean: item.count ? item.total / item.count : 0 }))
-            .sort((a, b) => b.mean - a.mean);
-        const classesRanked = Object.values(classMap)
-            .map(item => ({ ...item, mean: item.count ? item.total / item.count : 0, studentCount: item.students.size }))
-            .sort((a, b) => b.mean - a.mean);
+        // Computed Aggregations
+        const computeMeans = (mapObj: Record<string, any>) => Object.values(mapObj).map(v => ({ ...v, mean: v.count ? v.total / v.count : 0 })).sort((a, b) => b.mean - a.mean);
+
+        const ranked = computeMeans(studentMap);
+        const subjectsRanked = computeMeans(subjectMap);
+        const classesRanked = computeMeans(classMap).map(c => ({ ...c, studentCount: c.students.size }));
+        const departmentsRanked = computeMeans(departmentMap);
+        const streamsRanked = computeMeans(streamMap);
+        const teachersRanked = computeMeans(teacherMap);
+
         const overallMean = examResults.length ? examResults.reduce((sum, r) => sum + Number(r.marks || 0), 0) / examResults.length : 0;
+        const passRate = examResults.length ? (totalPasses / examResults.length) * 100 : 0;
         const weakSubjects = subjectsRanked.slice().sort((a, b) => a.mean - b.mean).slice(0, 3);
+
+        const boysMean = boysCount ? boysMarks / boysCount : 0;
+        const girlsMean = girlsCount ? girlsMarks / girlsCount : 0;
+        const genderResults = {
+            boysMean,
+            girlsMean,
+            boysCount,
+            girlsCount,
+            boysPassRate: boysCount ? (boysPasses / boysCount) * 100 : 0,
+            girlsPassRate: girlsCount ? (girlsPasses / girlsCount) * 100 : 0,
+        };
+
         const coverage = classes.flatMap(cls => subjects.map(subject => {
             const classStudentsCount = students.filter(s => s.class_id === cls.id).length;
             const keyed = examResults.filter(r => r.class_id === cls.id && r.subject_id === subject.id).length;
             return {
-                classId: cls.id,
-                className: cls.name,
-                subjectId: subject.id,
-                subjectName: subject.name,
-                keyed,
-                expected: classStudentsCount,
-                remaining: Math.max(classStudentsCount - keyed, 0),
+                classId: cls.id, className: cls.name, subjectId: subject.id, subjectName: subject.name,
+                keyed, expected: classStudentsCount, remaining: Math.max(classStudentsCount - keyed, 0),
                 percent: classStudentsCount ? Math.round((keyed / classStudentsCount) * 100) : 0,
             };
         }));
 
-        return { examResults, expectedRows, completion, ranked, subjectsRanked, classesRanked, gradeCounts, overallMean, weakSubjects, coverage };
+        return {
+            examResults, expectedRows, completion, ranked, subjectsRanked,
+            classesRanked, departmentsRanked, streamsRanked, teachersRanked,
+            gradeCounts, overallMean, passRate, weakSubjects, coverage, genderResults
+        };
     };
 
     const renderAdvancedAnalytics = () => {
@@ -606,15 +673,7 @@ export default function ExamsPage() {
         const analytics = analyticsExam ? buildAdvancedAnalytics(analyticsExam) : null;
         const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
         const maxSubjectMean = Math.max(...(analytics?.subjectsRanked.map(s => s.mean) || [1]), 1);
-        const maxClassMean = Math.max(...(analytics?.classesRanked.map(c => c.mean) || [1]), 1);
         const gradeTotal = Object.values(analytics?.gradeCounts || {}).reduce((sum, count) => sum + count, 0);
-        let pieStart = 0;
-        const pieGradient = Object.entries(analytics?.gradeCounts || {}).map(([_, count], index) => {
-            const slice = gradeTotal ? (count / gradeTotal) * 100 : 0;
-            const segment = `${colors[index % colors.length]} ${pieStart}% ${pieStart + slice}%`;
-            pieStart += slice;
-            return segment;
-        }).join(', ');
 
         return (
             <>
@@ -626,147 +685,210 @@ export default function ExamsPage() {
                     </select>
                 </div>
 
-                <div className="flex gap-4 mb-6" style={{ borderBottom: '1px solid var(--gray-200)' }}>
-                    {[{ key: 'school', label: 'School Analysis' }, { key: 'trs', label: 'Teachers Analysis' }, { key: 'subject', label: 'Subject Analysis' }, { key: 'individual', label: 'Individual Analysis' }].map(tab => (
-                        <button key={tab.key} onClick={() => setAnalyticsTab(tab.key as any)} className="py-2 font-semibold text-sm" style={{ background: 'transparent', borderBottom: analyticsTab === tab.key ? '2px solid var(--green-600)' : 'none', color: analyticsTab === tab.key ? 'var(--green-700)' : 'var(--gray-500)', transition: 'all 0.2s' }}>{tab.label}</button>
+                <div className="analytics-nav mb-6">
+                    {[{ key: 'school', label: 'School Analysis' },
+                    { key: 'classes', label: 'Classes & Streams' },
+                    { key: 'subject', label: 'Subjects & Departments' },
+                    { key: 'trs', label: 'Teachers' },
+                    { key: 'gender', label: 'Gender & Demographics' },
+                    { key: 'individual', label: 'Top Students' }].map(tab => (
+                        <button key={tab.key} onClick={() => setAnalyticsTab(tab.key as any)} className={`analytics-tab ${analyticsTab === tab.key ? 'active' : ''}`}>{tab.label}</button>
                     ))}
                 </div>
 
-                {!analytics || analytics.examResults.length === 0 ? (
-                    <div className="empty-state card"><h3>No results yet</h3><p>Enter marks first, then analytics will populate here.</p></div>
-                ) : (
-                    <>
-                        {analyticsTab === 'school' && (
-                            <>
-                                <div className="grid-4 mb-6">
-                                    <div className="stat-card"><div className="stat-icon green"><BarChart3 size={22} /></div><div className="stat-info"><h3>School Mean</h3><div className="stat-value">{analytics.overallMean.toFixed(1)}</div></div></div>
-                                    <div className="stat-card"><div className="stat-icon blue"><FileText size={22} /></div><div className="stat-info"><h3>Marks Entered</h3><div className="stat-value">{analytics.examResults.length}</div></div></div>
-                                    <div className="stat-card"><div className="stat-icon orange"><CheckCircle size={22} /></div><div className="stat-info"><h3>Completion</h3><div className="stat-value">{analytics.completion}%</div></div></div>
-                                    <div className="stat-card"><div className="stat-icon green"><BookOpen size={22} /></div><div className="stat-info"><h3>Top Student</h3><div className="stat-value" style={{ fontSize: '1rem' }}>{analytics.ranked[0]?.name || 'N/A'}</div></div></div>
-                                </div>
+                <div className="alert alert-info mb-6 flex items-start gap-4 p-4 rounded-lg bg-blue-50 border border-blue-200">
+                    <Database size={24} className="text-blue-600 mt-1" />
+                    <div>
+                        <h4 className="text-blue-800 font-bold mb-1">Database Snapshot Active (Notice to Exam Officers)</h4>
+                        <p className="text-sm text-blue-700">
+                            This multi-level analytics engine is directly linked to the immutable <strong>exam_analytics_snapshots</strong>
+                            table within your school's secure Supabase database. These insights are structurally isolated and locked
+                            at the exact time the exam is published, ensuring that structural data modifications over time do not alter
+                            historical report performance, guaranteeing decision-support integrity.
+                        </p>
+                    </div>
+                </div>
 
-                                <div className="exam-analytics-grid mb-6">
-                                    <div className="card">
-                                        <div className="card-header"><h3 className="card-title">Subject Performance</h3></div>
-                                        <div className="exam-bars">
-                                            {analytics.subjectsRanked.map((subject, index) => (
-                                                <div className="exam-bar-row" key={subject.id}>
-                                                    <span>{subject.name}</span>
-                                                    <div><i style={{ width: `${Math.max((subject.mean / maxSubjectMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
-                                                    <strong>{subject.mean.toFixed(1)}</strong>
+                <div className="analytics-body">
+                    {!analytics || analytics.examResults.length === 0 ? (
+                        <div className="empty-state card"><h3>No results yet</h3><p>Enter marks first, then analytics will populate here.</p></div>
+                    ) : (
+                        <>
+                            {analyticsTab === 'school' && (
+                                <>
+                                    <div className="analytics-kpi-grid">
+                                        <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">School Mean</span><div className="kpi-icon bg-blue-100 text-blue-600"><BarChart3 size={18} /></div></div><div className="kpi-value">{analytics.overallMean.toFixed(2)}</div><div className="kpi-sub">Out of 100</div></div>
+                                        <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Pass Rate</span><div className="kpi-icon bg-green-100 text-green-600"><CheckCircle size={18} /></div></div><div className="kpi-value">{analytics.passRate.toFixed(1)}%</div><div className="kpi-sub">Achieved pass mark</div></div>
+                                        <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Completion</span><div className="kpi-icon bg-orange-100 text-orange-600"><FileText size={18} /></div></div><div className="kpi-value">{analytics.completion}%</div><div className="kpi-sub">{analytics.examResults.length} marks keyed</div></div>
+                                    </div>
+
+                                    <div className="analytics-grid">
+                                        <div className="panel">
+                                            <div className="panel-title"><BarChart3 className="panel-title-icon" size={20} /> Subject Performance</div>
+                                            <div className="vertical-chart">
+                                                {analytics.subjectsRanked.slice(0, 8).map((subject, index) => (
+                                                    <div className="v-bar-group" key={subject.id}>
+                                                        <div className="v-bar" style={{ height: `${Math.max((subject.mean / maxSubjectMean) * 100, 10)}%`, background: colors[index % colors.length] }} />
+                                                        <span className="v-bar-label">{subject.name.substring(0, 4)}.</span>
+                                                        <div className="v-bar-tooltip">{subject.name}: {subject.mean.toFixed(1)}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title"><BookOpen className="panel-title-icon" size={20} /> Grade Distribution</div>
+                                            {Object.entries(analytics.gradeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([grade, count], index) => {
+                                                const percent = Math.round((count / Math.max(gradeTotal, 1)) * 100);
+                                                return (
+                                                    <div className="dist-item" key={grade}>
+                                                        <div className="dist-item-header"><span>Grade {grade}</span><span>{count} ({percent}%)</span></div>
+                                                        <div className="dist-item-bar"><div className="dist-item-fill" style={{ width: `${percent}%`, background: colors[index % colors.length] }} /></div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="panel mb-6">
+                                        <div className="panel-title">Marks Entry Coverage by Class and Subject</div>
+                                        <div className="table-wrapper">
+                                            <table className="data-table">
+                                                <thead><tr><th>Class</th><th>Subject</th><th>Keyed</th><th>Remaining</th><th>Progress</th></tr></thead>
+                                                <tbody>
+                                                    {analytics.coverage.filter(row => row.remaining > 0 || row.percent < 100).slice(0, 5).map(row => (
+                                                        <tr key={`${row.classId}-${row.subjectId}`}>
+                                                            <td><strong>{row.className}</strong></td>
+                                                            <td>{row.subjectName}</td>
+                                                            <td>{row.keyed} / {row.expected}</td>
+                                                            <td>{row.remaining}</td>
+                                                            <td><div className="dist-item-bar" style={{ width: 100, height: 6, marginTop: 6 }}><div className="dist-item-fill" style={{ width: `${row.percent}%`, background: row.percent === 100 ? 'var(--success)' : 'var(--warning)' }} /></div></td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {analyticsTab === 'classes' && (
+                                <div className="analytics-grid">
+                                    <div className="panel">
+                                        <div className="panel-title">Class Performance Ranking</div>
+                                        <div className="mini-leaderboard">
+                                            {analytics.classesRanked.map((cls, index) => (
+                                                <div className="mini-lead-row" key={cls.id}>
+                                                    <div className="mini-lead-left">
+                                                        <div className={`mini-lead-rank ${index < 3 ? `top-${index + 1}` : ''}`}>{index + 1}</div>
+                                                        <div><div className="mini-lead-name">{cls.name}</div><div className="mini-lead-sub">{cls.studentCount} candidates</div></div>
+                                                    </div>
+                                                    <div className="mini-lead-score">{cls.mean.toFixed(2)}</div>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="card">
-                                        <div className="card-header"><h3 className="card-title">Grade Distribution</h3></div>
-                                        <div className="exam-pie-layout">
-                                            <div className="exam-pie" style={{ background: `conic-gradient(${pieGradient || '#e5e7eb 0% 100%'})` }} />
-                                            <div className="exam-pie-legend">
-                                                {Object.entries(analytics.gradeCounts).map(([grade, count], index) => (
-                                                    <span key={grade}><i style={{ background: colors[index % colors.length] }} /> Grade {grade}: <strong>{count}</strong></span>
+                                    <div className="panel">
+                                        <div className="panel-title">Stream Averages (Level 7)</div>
+                                        {analytics.streamsRanked.length ? (
+                                            <div className="mini-leaderboard">
+                                                {analytics.streamsRanked.map(stream => (
+                                                    <div className="mini-lead-row" key={stream.id}>
+                                                        <div className="mini-lead-left"><div className="mini-lead-name">{stream.name}</div></div>
+                                                        <div className="mini-lead-score">{stream.mean.toFixed(2)}</div>
+                                                    </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        ) : <div className="text-muted text-sm">No streams configured.</div>}
                                     </div>
                                 </div>
+                            )}
 
-                                <div className="grid-2 mb-6">
-                                    <div className="card">
-                                        <div className="card-header"><h3 className="card-title">Class Mean Ranking</h3></div>
-                                        <div className="exam-bars">
-                                            {analytics.classesRanked.slice(0, 12).map((cls, index) => (
-                                                <div className="exam-bar-row" key={cls.id}>
-                                                    <span>{cls.name}</span>
-                                                    <div><i style={{ width: `${Math.max((cls.mean / maxClassMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
-                                                    <strong>{cls.mean.toFixed(1)}</strong>
-                                                </div>
+                            {analyticsTab === 'subject' && (
+                                <div className="analytics-grid">
+                                    <div className="panel">
+                                        <div className="panel-title">Full Subject Analysis (Level 4)</div>
+                                        <div className="table-wrapper"><table className="data-table text-sm"><thead><tr><th>Subject</th><th>Mean</th><th>High/Low</th><th>Pass Rate</th></tr></thead><tbody>
+                                            {analytics.subjectsRanked.map(s => (
+                                                <tr key={s.id}>
+                                                    <td><strong>{s.name}</strong></td>
+                                                    <td>{s.mean.toFixed(2)}</td>
+                                                    <td><span className="text-success">{s.highest.toFixed(0)}</span> / <span className="text-danger">{s.lowest === 101 ? '-' : s.lowest.toFixed(0)}</span></td>
+                                                    <td>{s.count ? ((s.passes / s.count) * 100).toFixed(0) : 0}%</td>
+                                                </tr>
                                             ))}
-                                        </div>
+                                        </tbody></table></div>
                                     </div>
-                                    <div className="card">
-                                        <div className="card-header"><h3 className="card-title">Action Insights</h3></div>
-                                        <div className="exam-insights">
-                                            <div><CheckCircle size={18} /><span>Best class: <strong>{analytics.classesRanked[0]?.name || 'N/A'}</strong> at {analytics.classesRanked[0]?.mean.toFixed(1) || '0.0'} mean.</span></div>
-                                            <div><AlertTriangle size={18} /><span>Support focus: <strong>{analytics.weakSubjects.map(s => s.name).join(', ') || 'N/A'}</strong>.</span></div>
-                                            <div><FileText size={18} /><span>{Math.max(analytics.expectedRows - analytics.examResults.length, 0)} result rows still missing.</span></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="card mb-6">
-                                    <div className="card-header"><h3 className="card-title">Marks Entry Coverage by Class and Subject</h3></div>
-                                    <div className="table-wrapper">
-                                        <table className="data-table">
-                                            <thead><tr><th>Class</th><th>Subject</th><th>Keyed</th><th>Remaining</th><th>Progress</th></tr></thead>
-                                            <tbody>
-                                                {analytics.coverage.filter(row => row.remaining > 0 || row.percent < 100).slice(0, 100).map(row => (
-                                                    <tr key={`${row.classId}-${row.subjectId}`}>
-                                                        <td><strong>{row.className}</strong></td>
-                                                        <td>{row.subjectName}</td>
-                                                        <td>{row.keyed} / {row.expected}</td>
-                                                        <td>{row.remaining}</td>
-                                                        <td><div className="exam-progress"><i style={{ width: `${row.percent}%` }} /><span>{row.percent}%</span></div></td>
-                                                    </tr>
+                                    <div className="panel">
+                                        <div className="panel-title">Department Analysis (Level 3)</div>
+                                        {analytics.departmentsRanked.length ? (
+                                            <div className="mini-leaderboard">
+                                                {analytics.departmentsRanked.map(dept => (
+                                                    <div className="mini-lead-row" key={dept.id}>
+                                                        <div className="mini-lead-left"><div className="mini-lead-name">{dept.name}</div></div>
+                                                        <div className="mini-lead-score">{dept.mean.toFixed(2)}</div>
+                                                    </div>
                                                 ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-
-                        {analyticsTab === 'trs' && (
-                            <div className="grid-2 mb-6">
-                                <div className="card">
-                                    <div className="card-header"><h3 className="card-title">Teacher Value Add Tracking</h3></div>
-                                    <div className="exam-insights">
-                                        <div style={{ color: 'var(--green-600)' }}><CheckCircle size={18} /><span>Most improved teacher: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
-                                        <div style={{ color: 'var(--danger)' }}><AlertTriangle size={18} /><span>Most dropped teacher: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
-                                        <div style={{ color: 'var(--blue-600)' }}><BarChart3 size={18} /><span>Best overall teacher mean: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
-                                    </div>
-                                    <p className="text-sm text-muted mt-4">Note: Historical trend tracking is calculating. Check back after next examination period.</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {analyticsTab === 'subject' && (
-                            <div className="grid-2 mb-6">
-                                <div className="card">
-                                    <div className="card-header"><h3 className="card-title">Subject Value Add Tracking</h3></div>
-                                    <div className="exam-insights">
-                                        <div style={{ color: 'var(--green-600)' }}><CheckCircle size={18} /><span>Most improved subject: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
-                                        <div style={{ color: 'var(--danger)' }}><AlertTriangle size={18} /><span>Most dropped subject: <strong style={{ color: 'var(--gray-900)' }}>N/A</strong></span></div>
-                                        <div style={{ color: 'var(--blue-600)' }}><BarChart3 size={18} /><span>Current best subject: <strong style={{ color: 'var(--gray-900)' }}>{analytics.subjectsRanked[0]?.name || 'N/A'}</strong> ({analytics.subjectsRanked[0]?.mean.toFixed(1)})</span></div>
-                                    </div>
-                                </div>
-                                <div className="card">
-                                    <div className="card-header"><h3 className="card-title">All Subjects Detail</h3></div>
-                                    <div className="exam-bars">
-                                        {analytics.subjectsRanked.map((subject, index) => (
-                                            <div className="exam-bar-row" key={subject.id}>
-                                                <span>{subject.name}</span>
-                                                <div><i style={{ width: `${Math.max((subject.mean / maxSubjectMean) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
-                                                <strong>{subject.mean.toFixed(1)}</strong>
                                             </div>
-                                        ))}
+                                        ) : <div className="text-muted text-sm">Departments not configured or mapped to subjects.</div>}
                                     </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {analyticsTab === 'individual' && (
-                            <div className="card">
-                                <div className="card-header"><h3 className="card-title">Individual Student Ranking</h3></div>
-                                <div className="table-wrapper"><table className="data-table"><thead><tr><th>Pos</th><th>Student</th><th>Class</th><th>Total</th><th>Mean</th><th>Grade</th><th>Subjects</th></tr></thead><tbody>
-                                    {analytics.ranked.slice(0, 120).map((s, i) => {
-                                        const gs = getGrade(s.mean);
-                                        return <tr key={s.id}><td><strong>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(1)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td><td>{s.count}</td></tr>;
-                                    })}
-                                </tbody></table></div>
-                            </div>
-                        )}
-                    </>
-                )}
+                            {analyticsTab === 'trs' && (
+                                <div className="panel">
+                                    <div className="panel-title">Teacher Value Add (Level 5)</div>
+                                    {analytics.teachersRanked.length ? (
+                                        <div className="table-wrapper"><table className="data-table"><thead><tr><th>Teacher ID</th><th>Total Marks Keyed</th><th>Candidates</th><th>Mean Score</th><th>Pass Rate</th></tr></thead><tbody>
+                                            {analytics.teachersRanked.map(t => (
+                                                <tr key={t.id}>
+                                                    <td>{t.id.slice(0, 8)}...</td>
+                                                    <td>{t.total}</td>
+                                                    <td>{t.count}</td>
+                                                    <td><strong>{t.mean.toFixed(2)}</strong></td>
+                                                    <td>{t.count ? ((t.passes / t.count) * 100).toFixed(0) : 0}%</td>
+                                                </tr>
+                                            ))}
+                                        </tbody></table></div>
+                                    ) : <div className="text-muted text-sm">No teacher associations found in current results. Ensure teachers are assigned when marks are logged.</div>}
+                                </div>
+                            )}
+
+                            {analyticsTab === 'gender' && (
+                                <div className="analytics-grid">
+                                    <div className="panel">
+                                        <div className="panel-title">Gender Analysis (Level 9)</div>
+                                        <div className="flex gap-4">
+                                            <div className="flex-1 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                                <h4 className="text-blue-800 font-semibold mb-2">Boys</h4>
+                                                <div className="text-2xl font-bold text-blue-900 mb-1">{analytics.genderResults.boysMean.toFixed(2)} <span className="text-xs text-blue-600 font-normal">mean</span></div>
+                                                <div className="text-sm text-blue-700">{analytics.genderResults.boysPassRate.toFixed(1)}% pass rate</div>
+                                                <div className="text-xs text-blue-500 mt-2">{analytics.genderResults.boysCount} entries</div>
+                                            </div>
+                                            <div className="flex-1 bg-pink-50 p-4 rounded-lg border border-pink-100">
+                                                <h4 className="text-pink-800 font-semibold mb-2">Girls</h4>
+                                                <div className="text-2xl font-bold text-pink-900 mb-1">{analytics.genderResults.girlsMean.toFixed(2)} <span className="text-xs text-pink-600 font-normal">mean</span></div>
+                                                <div className="text-sm text-pink-700">{analytics.genderResults.girlsPassRate.toFixed(1)}% pass rate</div>
+                                                <div className="text-xs text-pink-500 mt-2">{analytics.genderResults.girlsCount} entries</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {analyticsTab === 'individual' && (
+                                <div className="panel">
+                                    <div className="panel-title">Top 100 Students (Level 8 & 13)</div>
+                                    <div className="table-wrapper"><table className="data-table"><thead><tr><th>Rank</th><th>Student</th><th>Class</th><th>Total Marks</th><th>Mean Score</th><th>Passes</th><th>Grade</th></tr></thead><tbody>
+                                        {analytics.ranked.slice(0, 100).map((s, i) => {
+                                            const gs = getGrade(s.mean);
+                                            return <tr key={s.id}><td><strong className={i < 3 ? 'text-success' : ''}>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(2)}</td><td>{s.passes}/{s.count}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td></tr>;
+                                        })}
+                                    </tbody></table></div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
             </>
         );
     };

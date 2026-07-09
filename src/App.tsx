@@ -34,6 +34,7 @@ import AttendancePage from './pages/attendance/AttendancePage';
 import FinancePage from './pages/finance/FinancePage';
 import DocumentationPage from './pages/documents/DocumentationPage';
 import SitePage from './pages/site/SitePage';
+import ContactPage from './pages/site/ContactPage';
 
 // Simple placeholder pages for sections being built
 function Placeholder({ title }: { title: string }) {
@@ -80,65 +81,66 @@ export default function App() {
           <BrowserRouter>
             <Toaster position="top-right" />
             <Routes>
-            {/* Public Auth Routes */}
-            <Route path="/auth/login" element={<LoginPage />} />
-            <Route path="/auth/signup" element={<SignupPage />} />
-            <Route path="/auth/create-account" element={<InviteAcceptPage />} />
-            <Route path="/site" element={<SitePage />} />
-            <Route path="/site/:page" element={<SitePage />} />
+              {/* Public Auth Routes */}
+              <Route path="/auth/login" element={<LoginPage />} />
+              <Route path="/auth/signup" element={<SignupPage />} />
+              <Route path="/auth/create-account" element={<InviteAcceptPage />} />
+              <Route path="/site" element={<SitePage />} />
+              <Route path="/site/contact" element={<ContactPage />} />
+              <Route path="/site/:page" element={<SitePage />} />
 
-            {/* Setup Wizard */}
-            <Route path="/setup" element={
-              <ProtectedRoute>
-                <SetupPage />
-              </ProtectedRoute>
-            } />
+              {/* Setup Wizard */}
+              <Route path="/setup" element={
+                <ProtectedRoute>
+                  <SetupPage />
+                </ProtectedRoute>
+              } />
 
-            {/* Dashboard Routes */}
-            <Route path="/" element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<DashboardPage />} />
+              {/* Dashboard Routes */}
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }>
+                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route path="dashboard" element={<DashboardPage />} />
 
-              {/* People */}
-              <Route path="students" element={<StudentsPage />} />
-              <Route path="student-leaders" element={<StudentLeadersPage />} />
-              <Route path="staff" element={<StaffPage />} />
-              <Route path="duty-roster" element={<DutyRosterPage />} />
-              <Route path="guardians" element={<GuardiansPage />} />
-              <Route path="alumni" element={<AlumniPage />} />
+                {/* People */}
+                <Route path="students" element={<StudentsPage />} />
+                <Route path="student-leaders" element={<StudentLeadersPage />} />
+                <Route path="staff" element={<StaffPage />} />
+                <Route path="duty-roster" element={<DutyRosterPage />} />
+                <Route path="guardians" element={<GuardiansPage />} />
+                <Route path="alumni" element={<AlumniPage />} />
 
-              {/* Academics */}
-              <Route path="academics/streams" element={<StreamsPage />} />
-              <Route path="academics/subjects" element={<SubjectsPage />} />
-              <Route path="academics/houses" element={<HousesPage />} />
-              <Route path="academics/years" element={<AcademicYearsPage />} />
-              <Route path="academics/departments" element={<DepartmentsPage />} />
-              <Route path="academics/timetable" element={<TimetablePage />} />
+                {/* Academics */}
+                <Route path="academics/streams" element={<StreamsPage />} />
+                <Route path="academics/subjects" element={<SubjectsPage />} />
+                <Route path="academics/houses" element={<HousesPage />} />
+                <Route path="academics/years" element={<AcademicYearsPage />} />
+                <Route path="academics/departments" element={<DepartmentsPage />} />
+                <Route path="academics/timetable" element={<TimetablePage />} />
 
-              {/* Assessment — each is a full page with internal tabs */}
-              <Route path="exams" element={<ExamsPage />} />
-              <Route path="reports" element={<ReportCardsPage />} />
-              <Route path="attendance" element={<AttendancePage />} />
+                {/* Assessment — each is a full page with internal tabs */}
+                <Route path="exams" element={<ExamsPage />} />
+                <Route path="reports" element={<ReportCardsPage />} />
+                <Route path="attendance" element={<AttendancePage />} />
 
-              {/* Finance */}
-              <Route path="finance" element={<FinancePage />} />
+                {/* Finance */}
+                <Route path="finance" element={<FinancePage />} />
 
-              {/* Administration */}
-              <Route path="roles" element={<RolesPage />} />
-              <Route path="subscription" element={<SubscriptionPage />} />
-              <Route path="documentation" element={<DocumentationPage />} />
-              <Route path="announcements" element={<Placeholder title="Announcements" />} />
-              <Route path="settings" element={<SetupPage />} />
+                {/* Administration */}
+                <Route path="roles" element={<RolesPage />} />
+                <Route path="subscription" element={<SubscriptionPage />} />
+                <Route path="documentation" element={<DocumentationPage />} />
+                <Route path="announcements" element={<Placeholder title="Announcements" />} />
+                <Route path="settings" element={<SetupPage />} />
 
-              {/* Fallback for dashboard routes */}
-              <Route path="*" element={<Navigate to="/dashboard" />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+                {/* Fallback for dashboard routes */}
+                <Route path="*" element={<Navigate to="/dashboard" />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
         </HelpProvider>
       </SchoolProvider>
     </AuthProvider>

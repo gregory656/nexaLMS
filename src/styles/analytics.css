@@ -1,0 +1,320 @@
+/* ============================================
+   NexaLMS Analytics Dashboard
+   ============================================ */
+.analytics-canvas {
+    background: var(--white);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+}
+
+.analytics-nav {
+    display: flex;
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+    padding: 0.5rem 1rem 0;
+    gap: 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.analytics-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.analytics-tab {
+    padding: 0.75rem 1.25rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--gray-500);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.analytics-tab:hover {
+    color: var(--gray-800);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.analytics-tab.active {
+    color: var(--green-700);
+    border-bottom-color: var(--green-600);
+    background: var(--white);
+}
+
+.analytics-body {
+    padding: 1.5rem;
+    flex: 1;
+    background: var(--gray-50);
+}
+
+/* Grid Layouts */
+.analytics-grid {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.analytics-kpi-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    margin-bottom: 1.5rem;
+}
+
+/* KPI Cards */
+.kpi-card {
+    background: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+}
+
+.kpi-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.kpi-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.kpi-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kpi-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--gray-900);
+    line-height: 1.1;
+    margin-bottom: 0.25rem;
+}
+
+.kpi-sub {
+    font-size: 0.85rem;
+    color: var(--gray-500);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.kpi-trend-up {
+    color: var(--green-600);
+    font-weight: 600;
+}
+
+.kpi-trend-down {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+/* Distribution Bars */
+.dist-item {
+    margin-bottom: 0.75rem;
+}
+
+.dist-item-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+    color: var(--gray-700);
+}
+
+.dist-item-bar {
+    height: 8px;
+    background: var(--gray-100);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.dist-item-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+}
+
+/* Analytics Panels */
+.panel {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--gray-200);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-sm);
+}
+
+.panel-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.panel-title-icon {
+    color: var(--green-600);
+}
+
+/* Vertical Bar Chart (Simple) */
+.vertical-chart {
+    display: flex;
+    align-items: flex-end;
+    height: 160px;
+    gap: 4px;
+    padding-bottom: 24px;
+    position: relative;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.v-bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    height: 100%;
+    position: relative;
+}
+
+.v-bar {
+    width: 100%;
+    max-width: 40px;
+    border-radius: 4px 4px 0 0;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.v-bar:hover {
+    filter: brightness(1.1);
+}
+
+.v-bar-label {
+    position: absolute;
+    bottom: -24px;
+    font-size: 0.7rem;
+    color: var(--gray-600);
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.v-bar-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 8px;
+    background: var(--gray-900);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 10;
+}
+
+.v-bar-group:hover .v-bar-tooltip {
+    opacity: 1;
+}
+
+/* Leaderboards / Small Tables */
+.mini-leaderboard {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.mini-lead-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem;
+    border-radius: var(--radius-md);
+    background: var(--gray-50);
+}
+
+.mini-lead-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.mini-lead-rank {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--white);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--gray-500);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.mini-lead-rank.top-1 {
+    background: #fef08a;
+    color: #854d0e;
+}
+
+.mini-lead-rank.top-2 {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.mini-lead-rank.top-3 {
+    background: #fed7aa;
+    color: #9a3412;
+}
+
+.mini-lead-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.mini-lead-sub {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+}
+
+.mini-lead-score {
+    font-weight: 700;
+    color: var(--gray-900);
+}
+
+.analytics-filter-bar {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--white);
+    border-bottom: 1px solid var(--gray-200);
+    align-items: center;
+}
