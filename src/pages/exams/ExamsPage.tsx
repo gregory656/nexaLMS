@@ -777,6 +777,69 @@ export default function ExamsPage() {
         const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
         const maxSubjectMean = Math.max(...(analytics?.subjectsRanked.map(s => s.mean) || [1]), 1);
         const gradeTotal = Object.values(analytics?.gradeCounts || {}).reduce((sum, count) => sum + count, 0);
+        const movementItems = [
+            ...(analytics?.mostImprovedStudents.slice(0, 5).map(s => ({ label: s.name.split(' ')[0], value: Math.max(s.improvement || 0, 0) })) || []),
+            ...(analytics?.biggestDeclineStudents.slice(0, 5).map(s => ({ label: s.name.split(' ')[0], value: Math.abs(Math.min(s.improvement || 0, 0)) })) || []),
+        ];
+        const gradePie = (() => {
+            let start = 0;
+            return Object.entries(analytics?.gradeCounts || {}).map(([_, count], index) => {
+                const slice = gradeTotal ? (count / gradeTotal) * 100 : 0;
+                const segment = `${colors[index % colors.length]} ${start}% ${start + slice}%`;
+                start += slice;
+                return segment;
+            }).join(', ');
+        })();
+        const genderTotal = (analytics?.genderResults.boysCount || 0) + (analytics?.genderResults.girlsCount || 0);
+        const genderPie = genderTotal
+            ? `#3b82f6 0% ${((analytics!.genderResults.boysCount / genderTotal) * 100).toFixed(1)}%, #ec4899 ${((analytics!.genderResults.boysCount / genderTotal) * 100).toFixed(1)}% 100%`
+            : '#e5e7eb 0% 100%';
+        const trendPoints = analytics ? [analytics.overallMean, analytics.passRate, analytics.distinctionRate, analytics.completion] : [];
+        const renderDonut = (background: string, center: string, label: string) => (
+            <div className="super-donut-wrap">
+                <div className="super-donut" style={{ background: `conic-gradient(${background || '#e5e7eb 0% 100%'})` }}>
+                    <div><strong>{center}</strong><span>{label}</span></div>
+                </div>
+            </div>
+        );
+        const renderBars = (items: any[], getLabel: (item: any) => string, getValue: (item: any) => number, suffix = '') => {
+            const maxValue = Math.max(...items.map(getValue), 1);
+            return (
+                <div className="super-bars">
+                    {items.length ? items.map((item, index) => {
+                        const value = getValue(item);
+                        return (
+                            <div className="super-bar-row" key={`${getLabel(item)}-${index}`}>
+                                <span title={getLabel(item)}>{getLabel(item)}</span>
+                                <div><i style={{ width: `${Math.max((value / maxValue) * 100, 4)}%`, background: colors[index % colors.length] }} /></div>
+                                <strong>{value.toFixed(1)}{suffix}</strong>
+                            </div>
+                        );
+                    }) : <div className="text-muted text-sm">N/A</div>}
+                </div>
+            );
+        };
+        const renderLine = (values: number[], labels: string[]) => {
+            const points = values.map((value, index) => {
+                const x = values.length === 1 ? 50 : (index / (values.length - 1)) * 100;
+                const y = 100 - Math.max(Math.min(value, 100), 0);
+                return `${x},${y}`;
+            }).join(' ');
+            return (
+                <div className="super-line-chart">
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <polyline points="0,100 100,100" className="super-line-base" />
+                        <polyline points={points} className="super-line-path" />
+                        {values.map((value, index) => {
+                            const x = values.length === 1 ? 50 : (index / (values.length - 1)) * 100;
+                            const y = 100 - Math.max(Math.min(value, 100), 0);
+                            return <circle key={labels[index]} cx={x} cy={y} r="2.4" className="super-line-dot" />;
+                        })}
+                    </svg>
+                    <div className="super-line-labels">{labels.map((label, index) => <span key={label}>{label}<strong>{values[index].toFixed(1)}</strong></span>)}</div>
+                </div>
+            );
+        };
 
         return (
             <>
@@ -824,6 +887,32 @@ export default function ExamsPage() {
                                         <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Pass Rate</span><div className="kpi-icon bg-green-100 text-green-600"><CheckCircle size={18} /></div></div><div className="kpi-value">{analytics.passRate.toFixed(1)}%</div><div className="kpi-sub">Achieved pass mark</div></div>
                                         <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Completion</span><div className="kpi-icon bg-orange-100 text-orange-600"><FileText size={18} /></div></div><div className="kpi-value">{analytics.completion}%</div><div className="kpi-sub">{analytics.examResults.length} marks keyed</div></div>
                                         <div className="kpi-card"><div className="kpi-header"><span className="kpi-title">Distinction Rate</span><div className="kpi-icon bg-purple-100 text-purple-600"><Sparkles size={18} /></div></div><div className="kpi-value">{analytics.distinctionRate.toFixed(1)}%</div><div className="kpi-sub">80 marks and above</div></div>
+                                    </div>
+
+                                    <div className="super-chart-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Grade Share Pie Chart</div>
+                                            <div className="super-chart-split">
+                                                {renderDonut(gradePie, String(gradeTotal), 'entries')}
+                                                <div className="exam-pie-legend">
+                                                    {Object.entries(analytics.gradeCounts).map(([grade, count], index) => (
+                                                        <span key={grade}><i style={{ background: colors[index % colors.length] }} /> Grade {grade}: <strong>{gradeTotal ? ((count / gradeTotal) * 100).toFixed(1) : 0}%</strong></span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Performance Trend Snapshot</div>
+                                            {renderLine(trendPoints, ['Mean', 'Pass', 'Dist.', 'Done'])}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Pass vs Fail</div>
+                                            {renderBars([
+                                                { label: 'Pass', value: analytics.passRate },
+                                                { label: 'Fail', value: analytics.failRate },
+                                                { label: 'Distinction', value: analytics.distinctionRate },
+                                            ], item => item.label, item => item.value, '%')}
+                                        </div>
                                     </div>
 
                                     <div className="analytics-grid">
@@ -897,123 +986,218 @@ export default function ExamsPage() {
                             )}
 
                             {analyticsTab === 'classes' && (
-                                <div className="analytics-grid">
-                                    <div className="panel">
-                                        <div className="panel-title">Class Performance Ranking</div>
-                                        <div className="mini-leaderboard">
-                                            {analytics.classesRanked.map((cls, index) => (
-                                                <div className="mini-lead-row" key={cls.id}>
-                                                    <div className="mini-lead-left">
-                                                        <div className={`mini-lead-rank ${index < 3 ? `top-${index + 1}` : ''}`}>{index + 1}</div>
-                                                        <div><div className="mini-lead-name">{cls.name}</div><div className="mini-lead-sub">{cls.studentCount} candidates</div></div>
-                                                    </div>
-                                                    <div className="mini-lead-score">{cls.mean.toFixed(2)}</div>
-                                                </div>
-                                            ))}
+                                <div className="grid" style={{ gap: '1rem' }}>
+                                    <div className="super-chart-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Class Mean Bar Chart</div>
+                                            {renderBars(analytics.classesRanked.slice(0, 10), cls => cls.name, cls => cls.mean)}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Stream Mean Bar Chart</div>
+                                            {renderBars(analytics.streamsRanked.slice(0, 10), stream => stream.name, stream => stream.mean)}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Class Improvement Line</div>
+                                            {renderLine(analytics.classesRanked.slice(0, 5).map(c => Math.max(Math.min((c.improvement || 0) + 50, 100), 0)), analytics.classesRanked.slice(0, 5).map(c => c.name.substring(0, 6)))}
                                         </div>
                                     </div>
-                                    <div className="panel">
-                                        <div className="panel-title">Stream Averages (Level 7)</div>
-                                        {analytics.streamsRanked.length ? (
+                                    <div className="analytics-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Class Performance Ranking</div>
                                             <div className="mini-leaderboard">
-                                                {analytics.streamsRanked.map(stream => (
-                                                    <div className="mini-lead-row" key={stream.id}>
-                                                        <div className="mini-lead-left"><div className="mini-lead-name">{stream.name}</div><div className="mini-lead-sub">{stream.count} entries</div></div>
-                                                        <div className="mini-lead-score">{stream.mean.toFixed(2)}</div>
+                                                {analytics.classesRanked.map((cls, index) => (
+                                                    <div className="mini-lead-row" key={cls.id}>
+                                                        <div className="mini-lead-left">
+                                                            <div className={`mini-lead-rank ${index < 3 ? `top-${index + 1}` : ''}`}>{index + 1}</div>
+                                                            <div><div className="mini-lead-name">{cls.name}</div><div className="mini-lead-sub">{cls.studentCount} candidates</div></div>
+                                                        </div>
+                                                        <div className="mini-lead-score">{cls.mean.toFixed(2)}</div>
                                                     </div>
                                                 ))}
                                             </div>
-                                        ) : <div className="text-muted text-sm">No streams configured.</div>}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Stream Averages (Level 7)</div>
+                                            {analytics.streamsRanked.length ? (
+                                                <div className="mini-leaderboard">
+                                                    {analytics.streamsRanked.map(stream => (
+                                                        <div className="mini-lead-row" key={stream.id}>
+                                                            <div className="mini-lead-left"><div className="mini-lead-name">{stream.name}</div><div className="mini-lead-sub">{stream.count} entries</div></div>
+                                                            <div className="mini-lead-score">{stream.mean.toFixed(2)}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : <div className="text-muted text-sm">No streams configured.</div>}
+                                        </div>
                                     </div>
                                 </div>
                             )}
 
                             {analyticsTab === 'subject' && (
-                                <div className="analytics-grid">
-                                    <div className="panel">
-                                        <div className="panel-title">Full Subject Analysis (Level 4)</div>
-                                        <div className="table-wrapper"><table className="data-table text-sm"><thead><tr><th>Subject</th><th>Mean</th><th>Median</th><th>Mode</th><th>Std Dev</th><th>High/Low</th><th>Pass Rate</th><th>Teacher</th></tr></thead><tbody>
-                                            {analytics.subjectsRanked.map(s => (
-                                                <tr key={s.id}>
-                                                    <td><strong>{s.name}</strong></td>
-                                                    <td>{s.mean.toFixed(2)}</td>
-                                                    <td>{s.median.toFixed(1)}</td>
-                                                    <td>{s.mode}</td>
-                                                    <td>{s.standardDeviation.toFixed(1)}</td>
-                                                    <td><span className="text-success">{s.highest.toFixed(0)}</span> / <span className="text-danger">{s.lowest === 101 ? '-' : s.lowest.toFixed(0)}</span></td>
-                                                    <td>{s.count ? ((s.passes / s.count) * 100).toFixed(0) : 0}%</td>
-                                                    <td>{s.teachers}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody></table></div>
+                                <div className="grid" style={{ gap: '1rem' }}>
+                                    <div className="super-chart-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Subject Mean Bar Chart</div>
+                                            {renderBars(analytics.subjectsRanked.slice(0, 10), s => s.name, s => s.mean)}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Subject Pass Rate Chart</div>
+                                            {renderBars(analytics.subjectsRanked.slice(0, 10), s => s.name, s => s.count ? (s.passes / s.count) * 100 : 0, '%')}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Department Mean Chart</div>
+                                            {renderBars(analytics.departmentsRanked.slice(0, 8), d => d.name, d => d.mean)}
+                                        </div>
                                     </div>
-                                    <div className="panel">
-                                        <div className="panel-title">Department Analysis (Level 3)</div>
-                                        {analytics.departmentsRanked.length ? (
-                                            <div className="mini-leaderboard">
-                                                {analytics.departmentsRanked.map(dept => (
-                                                    <div className="mini-lead-row" key={dept.id}>
-                                                        <div className="mini-lead-left"><div className="mini-lead-name">{dept.name}</div></div>
-                                                        <div className="mini-lead-score">{dept.mean.toFixed(2)}</div>
-                                                    </div>
+                                    <div className="analytics-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Full Subject Analysis (Level 4)</div>
+                                            <div className="table-wrapper"><table className="data-table text-sm"><thead><tr><th>Subject</th><th>Mean</th><th>Median</th><th>Mode</th><th>Std Dev</th><th>High/Low</th><th>Pass Rate</th><th>Teacher</th></tr></thead><tbody>
+                                                {analytics.subjectsRanked.map(s => (
+                                                    <tr key={s.id}>
+                                                        <td><strong>{s.name}</strong></td>
+                                                        <td>{s.mean.toFixed(2)}</td>
+                                                        <td>{s.median.toFixed(1)}</td>
+                                                        <td>{s.mode}</td>
+                                                        <td>{s.standardDeviation.toFixed(1)}</td>
+                                                        <td><span className="text-success">{s.highest.toFixed(0)}</span> / <span className="text-danger">{s.lowest === 101 ? '-' : s.lowest.toFixed(0)}</span></td>
+                                                        <td>{s.count ? ((s.passes / s.count) * 100).toFixed(0) : 0}%</td>
+                                                        <td>{s.teachers}</td>
+                                                    </tr>
                                                 ))}
-                                            </div>
-                                        ) : <div className="text-muted text-sm">Departments not configured or mapped to subjects.</div>}
+                                            </tbody></table></div>
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Department Analysis (Level 3)</div>
+                                            {analytics.departmentsRanked.length ? (
+                                                <div className="mini-leaderboard">
+                                                    {analytics.departmentsRanked.map(dept => (
+                                                        <div className="mini-lead-row" key={dept.id}>
+                                                            <div className="mini-lead-left"><div className="mini-lead-name">{dept.name}</div></div>
+                                                            <div className="mini-lead-score">{dept.mean.toFixed(2)}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : <div className="text-muted text-sm">Departments not configured or mapped to subjects.</div>}
+                                        </div>
                                     </div>
                                 </div>
                             )}
 
                             {analyticsTab === 'trs' && (
-                                <div className="panel">
-                                    <div className="panel-title">Teacher Value Add (Level 5)</div>
-                                    {analytics.teachersRanked.length ? (
-                                        <div className="table-wrapper"><table className="data-table"><thead><tr><th>Teacher</th><th>Candidates</th><th>Mean Score</th><th>Pass Rate</th><th>Distinction Rate</th><th>Improvement</th><th>Recognition</th></tr></thead><tbody>
-                                            {analytics.teachersRanked.map(t => (
-                                                <tr key={t.id}>
-                                                    <td><strong>{t.name}</strong></td>
-                                                    <td>{t.count}</td>
-                                                    <td><strong>{t.mean.toFixed(2)}</strong></td>
-                                                    <td>{t.count ? ((t.passes / t.count) * 100).toFixed(0) : 0}%</td>
-                                                    <td>{t.count ? ((t.distinctions / t.count) * 100).toFixed(0) : 0}%</td>
-                                                    <td>{t.improvement === null ? 'N/A' : t.improvement.toFixed(1)}</td>
-                                                    <td>{analytics.teachersRanked[0]?.id === t.id ? 'Best Teacher' : analytics.mostImprovedTeachers[0]?.id === t.id ? 'Most Improved' : 'N/A'}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody></table></div>
-                                    ) : <div className="text-muted text-sm">No teacher associations found in current results. Ensure teachers are assigned when marks are logged.</div>}
+                                <div className="grid" style={{ gap: '1rem' }}>
+                                    <div className="super-chart-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Teacher Mean Chart</div>
+                                            {renderBars(analytics.teachersRanked.slice(0, 10), t => t.name, t => t.mean)}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Teacher Pass Rate Chart</div>
+                                            {renderBars(analytics.teachersRanked.slice(0, 10), t => t.name, t => t.count ? (t.passes / t.count) * 100 : 0, '%')}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Teacher Distinction Chart</div>
+                                            {renderBars(analytics.teachersRanked.slice(0, 10), t => t.name, t => t.count ? (t.distinctions / t.count) * 100 : 0, '%')}
+                                        </div>
+                                    </div>
+                                    <div className="panel">
+                                        <div className="panel-title">Teacher Value Add (Level 5)</div>
+                                        {analytics.teachersRanked.length ? (
+                                            <div className="table-wrapper"><table className="data-table"><thead><tr><th>Teacher</th><th>Candidates</th><th>Mean Score</th><th>Pass Rate</th><th>Distinction Rate</th><th>Improvement</th><th>Recognition</th></tr></thead><tbody>
+                                                {analytics.teachersRanked.map(t => (
+                                                    <tr key={t.id}>
+                                                        <td><strong>{t.name}</strong></td>
+                                                        <td>{t.count}</td>
+                                                        <td><strong>{t.mean.toFixed(2)}</strong></td>
+                                                        <td>{t.count ? ((t.passes / t.count) * 100).toFixed(0) : 0}%</td>
+                                                        <td>{t.count ? ((t.distinctions / t.count) * 100).toFixed(0) : 0}%</td>
+                                                        <td>{t.improvement === null ? 'N/A' : t.improvement.toFixed(1)}</td>
+                                                        <td>{analytics.teachersRanked[0]?.id === t.id ? 'Best Teacher' : analytics.mostImprovedTeachers[0]?.id === t.id ? 'Most Improved' : 'N/A'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody></table></div>
+                                        ) : <div className="text-muted text-sm">No teacher associations found in current results. Ensure teachers are assigned when marks are logged.</div>}
+                                    </div>
                                 </div>
                             )}
 
                             {analyticsTab === 'gender' && (
-                                <div className="analytics-grid">
-                                    <div className="panel">
-                                        <div className="panel-title">Gender Analysis (Level 9)</div>
-                                        <div className="flex gap-4">
-                                            <div className="flex-1 bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                                <h4 className="text-blue-800 font-semibold mb-2">Boys</h4>
-                                                <div className="text-2xl font-bold text-blue-900 mb-1">{analytics.genderResults.boysMean.toFixed(2)} <span className="text-xs text-blue-600 font-normal">mean</span></div>
-                                                <div className="text-sm text-blue-700">{analytics.genderResults.boysPassRate.toFixed(1)}% pass rate</div>
-                                                <div className="text-xs text-blue-500 mt-2">{analytics.genderResults.boysCount} entries</div>
-                                            </div>
-                                            <div className="flex-1 bg-pink-50 p-4 rounded-lg border border-pink-100">
-                                                <h4 className="text-pink-800 font-semibold mb-2">Girls</h4>
-                                                <div className="text-2xl font-bold text-pink-900 mb-1">{analytics.genderResults.girlsMean.toFixed(2)} <span className="text-xs text-pink-600 font-normal">mean</span></div>
-                                                <div className="text-sm text-pink-700">{analytics.genderResults.girlsPassRate.toFixed(1)}% pass rate</div>
-                                                <div className="text-xs text-pink-500 mt-2">{analytics.genderResults.girlsCount} entries</div>
+                                <div className="grid" style={{ gap: '1rem' }}>
+                                    <div className="super-chart-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Gender Entry Pie Chart</div>
+                                            <div className="super-chart-split">
+                                                {renderDonut(genderPie, String(genderTotal || 'N/A'), 'entries')}
+                                                <div className="exam-pie-legend">
+                                                    <span><i style={{ background: '#3b82f6' }} /> Boys: <strong>{genderTotal ? ((analytics.genderResults.boysCount / genderTotal) * 100).toFixed(1) : 'N/A'}%</strong></span>
+                                                    <span><i style={{ background: '#ec4899' }} /> Girls: <strong>{genderTotal ? ((analytics.genderResults.girlsCount / genderTotal) * 100).toFixed(1) : 'N/A'}%</strong></span>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="table-wrapper mt-4"><table className="data-table"><tbody>
-                                            <tr><td>Best Boy</td><td><strong>{analytics.genderResults.bestBoy}</strong></td></tr>
-                                            <tr><td>Best Girl</td><td><strong>{analytics.genderResults.bestGirl}</strong></td></tr>
-                                            <tr><td>Top 10 Boys</td><td>{analytics.genderResults.topBoys.length ? analytics.genderResults.topBoys.map(s => s.name).join(', ') : 'N/A'}</td></tr>
-                                            <tr><td>Top 10 Girls</td><td>{analytics.genderResults.topGirls.length ? analytics.genderResults.topGirls.map(s => s.name).join(', ') : 'N/A'}</td></tr>
-                                        </tbody></table></div>
+                                        <div className="panel">
+                                            <div className="panel-title">Gender Mean Comparison</div>
+                                            {renderBars([
+                                                { label: 'Boys', value: analytics.genderResults.boysMean },
+                                                { label: 'Girls', value: analytics.genderResults.girlsMean },
+                                            ], item => item.label, item => item.value)}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Gender Pass Rate Comparison</div>
+                                            {renderBars([
+                                                { label: 'Boys', value: analytics.genderResults.boysPassRate },
+                                                { label: 'Girls', value: analytics.genderResults.girlsPassRate },
+                                            ], item => item.label, item => item.value, '%')}
+                                        </div>
+                                    </div>
+                                    <div className="analytics-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Gender Analysis (Level 9)</div>
+                                            <div className="flex gap-4">
+                                                <div className="flex-1 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                                    <h4 className="text-blue-800 font-semibold mb-2">Boys</h4>
+                                                    <div className="text-2xl font-bold text-blue-900 mb-1">{analytics.genderResults.boysMean.toFixed(2)} <span className="text-xs text-blue-600 font-normal">mean</span></div>
+                                                    <div className="text-sm text-blue-700">{analytics.genderResults.boysPassRate.toFixed(1)}% pass rate</div>
+                                                    <div className="text-xs text-blue-500 mt-2">{analytics.genderResults.boysCount} entries</div>
+                                                </div>
+                                                <div className="flex-1 bg-pink-50 p-4 rounded-lg border border-pink-100">
+                                                    <h4 className="text-pink-800 font-semibold mb-2">Girls</h4>
+                                                    <div className="text-2xl font-bold text-pink-900 mb-1">{analytics.genderResults.girlsMean.toFixed(2)} <span className="text-xs text-pink-600 font-normal">mean</span></div>
+                                                    <div className="text-sm text-pink-700">{analytics.genderResults.girlsPassRate.toFixed(1)}% pass rate</div>
+                                                    <div className="text-xs text-pink-500 mt-2">{analytics.genderResults.girlsCount} entries</div>
+                                                </div>
+                                            </div>
+                                            <div className="table-wrapper mt-4"><table className="data-table"><tbody>
+                                                <tr><td>Best Boy</td><td><strong>{analytics.genderResults.bestBoy}</strong></td></tr>
+                                                <tr><td>Best Girl</td><td><strong>{analytics.genderResults.bestGirl}</strong></td></tr>
+                                                <tr><td>Top 10 Boys</td><td>{analytics.genderResults.topBoys.length ? analytics.genderResults.topBoys.map(s => s.name).join(', ') : 'N/A'}</td></tr>
+                                                <tr><td>Top 10 Girls</td><td>{analytics.genderResults.topGirls.length ? analytics.genderResults.topGirls.map(s => s.name).join(', ') : 'N/A'}</td></tr>
+                                            </tbody></table></div>
+                                        </div>
                                     </div>
                                 </div>
                             )}
 
                             {analyticsTab === 'individual' && (
                                 <div className="grid" style={{ gap: '1rem' }}>
+                                    <div className="super-chart-grid">
+                                        <div className="panel">
+                                            <div className="panel-title">Top Students Mean Chart</div>
+                                            {renderBars(analytics.topStudents.slice(0, 10), s => s.name, s => s.mean)}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Improvement / Decline Movement</div>
+                                            {renderBars(movementItems.slice(0, 10), item => item.label, item => item.value)}
+                                        </div>
+                                        <div className="panel">
+                                            <div className="panel-title">Special List Percentages</div>
+                                            {renderBars([
+                                                { label: 'All Passes', value: analytics.ranked.length ? (analytics.allPassStudents.length / analytics.ranked.length) * 100 : 0 },
+                                                { label: 'At Risk', value: analytics.ranked.length ? (analytics.atRiskStudents.length / analytics.ranked.length) * 100 : 0 },
+                                                { label: 'Straight A', value: analytics.ranked.length ? (analytics.straightAStudents.length / analytics.ranked.length) * 100 : 0 },
+                                                { label: 'Failing 2+', value: analytics.ranked.length ? (analytics.failingMultipleSubjects.length / analytics.ranked.length) * 100 : 0 },
+                                            ], item => item.label, item => item.value, '%')}
+                                        </div>
+                                    </div>
                                     <div className="panel">
                                         <div className="panel-title">Top 100 Students (Level 8 & 13)</div>
                                         <div className="table-wrapper"><table className="data-table"><thead><tr><th>Rank</th><th>Student</th><th>Class</th><th>Total Marks</th><th>Mean Score</th><th>Passes</th><th>Improvement</th><th>Grade</th></tr></thead><tbody>
