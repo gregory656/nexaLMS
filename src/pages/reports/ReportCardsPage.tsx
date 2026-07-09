@@ -12,6 +12,7 @@ const TABS = [
     { key: 'generate', label: 'Generate', icon: FileText },
     { key: 'published', label: 'Published Reports', icon: ClipboardList },
     { key: 'download', label: 'Bulk Download', icon: Download },
+    { key: 'demo', label: 'Demo Report', icon: Download },
 ];
 
 export default function ReportCardsPage() {
@@ -61,7 +62,12 @@ export default function ReportCardsPage() {
         for (const gs of gradeScales) {
             if (marks >= gs.min_marks && marks <= gs.max_marks) return gs;
         }
-        return null;
+        // Demo grade scale fallback
+        if (marks >= 80) return { grade: 'A', remarks: 'Excellent' };
+        if (marks >= 70) return { grade: 'B', remarks: 'Very Good' };
+        if (marks >= 60) return { grade: 'C', remarks: 'Good' };
+        if (marks >= 50) return { grade: 'D', remarks: 'Fair' };
+        return { grade: 'E', remarks: 'Needs Improvement' };
     };
 
     const getStudentReport = (studentId: string) => {
@@ -87,7 +93,7 @@ export default function ReportCardsPage() {
 
         Object.entries(examGroups).forEach(([examId, examRes]) => {
             const exam = exams.find(e => e.id === examId);
-            if (exam && Array.isArray(examRes)) {
+            if (exam && Array.isArray(examRes) && examRes.length > 0) {
                 const examMean = examRes.reduce((s, r) => s + Number(r.marks || 0), 0) / examRes.length;
                 const examGrade = getGrade(examMean);
                 history.push({ examName: exam.name, mean: examMean, grade: examGrade?.grade });
@@ -247,6 +253,97 @@ export default function ReportCardsPage() {
             } catch { /* skip failed */ }
         }
         toast.success(`Downloaded ${count} individual report cards`);
+        setDownloading(false);
+    };
+
+    // ─── DEMO REPORT CARD ───
+    const handleDemoReport = async () => {
+        setDownloading(true);
+        try {
+            const demoSchool = {
+                name: 'NexaGen Academy',
+                motto: 'Excellence Through Innovation',
+                logo_url: school?.logo_url,
+                watermark_url: school?.watermark_url,
+            };
+
+            const demoStudent = {
+                first_name: 'James',
+                last_name: 'Omondi',
+                admission_number: '2024001',
+                profile_picture_url: null,
+                fee_balance: 15000,
+                fee_balance_updated_at: new Date().toISOString(),
+            };
+
+            const demoExam = {
+                name: 'End of Term 2 Examination 2024',
+            };
+
+            const demoClassName = 'Form 2 East';
+
+            const demoSubjects = [
+                { subjects: { name: 'Mathematics' }, marks: 85, remarks: 'Excellent' },
+                { subjects: { name: 'English' }, marks: 78, remarks: 'Very Good' },
+                { subjects: { name: 'Kiswahili' }, marks: 72, remarks: 'Very Good' },
+                { subjects: { name: 'Chemistry' }, marks: 68, remarks: 'Good' },
+                { subjects: { name: 'Physics' }, marks: 75, remarks: 'Very Good' },
+                { subjects: { name: 'Biology' }, marks: 82, remarks: 'Excellent' },
+                { subjects: { name: 'History' }, marks: 70, remarks: 'Very Good' },
+                { subjects: { name: 'Geography' }, marks: 65, remarks: 'Good' },
+            ];
+
+            const total = demoSubjects.reduce((s, r) => s + r.marks, 0);
+            const mean = total / demoSubjects.length;
+            const grade = getGrade(mean);
+
+            const demoAnalytics = {
+                history: [
+                    { examName: 'Term 1 Exam 2024', mean: 68.5, grade: 'C' },
+                    { examName: 'Mid Term 2 2024', mean: 74.2, grade: 'B' },
+                    { examName: 'End of Term 2 2024', mean: 76.9, grade: 'B' },
+                ],
+                subjectPerformance: demoSubjects.map(s => ({
+                    subject: s.subjects.name,
+                    marks: s.marks,
+                    grade: getGrade(s.marks)?.grade,
+                    classMean: s.marks - 5 + Math.random() * 10,
+                })),
+                gradeMix: [
+                    { grade: 'A', count: 2 },
+                    { grade: 'B', count: 4 },
+                    { grade: 'C', count: 2 },
+                ],
+                strengths: ['Mathematics', 'Biology', 'English'],
+                focus: ['Geography', 'History'],
+                advice: 'Strong performance in sciences and languages. Focus on improving humanities subjects for balanced excellence.',
+                classMean: 72.5,
+                improvement: 2.7,
+            };
+
+            const doc = await generateReportCardPdf({
+                school: demoSchool,
+                student: demoStudent,
+                exam: demoExam,
+                className: demoClassName,
+                subjects: demoSubjects,
+                total,
+                mean,
+                grade: grade?.grade || 'B',
+                remarks: grade?.remarks || 'Very Good',
+                feeBalance: demoStudent.fee_balance,
+                feeTimestamp: demoStudent.fee_balance_updated_at,
+                includeFeeBalance: true,
+                getGrade,
+                position: 3,
+                totalStudents: 45,
+                analytics: demoAnalytics,
+            });
+            downloadPdf(doc, 'demo_report_card_james_omondi');
+            toast.success('Demo report card downloaded');
+        } catch (err: any) {
+            toast.error('Demo download failed: ' + (err.message || ''));
+        }
         setDownloading(false);
     };
 
@@ -453,6 +550,47 @@ export default function ReportCardsPage() {
         </div>
     );
 
+    const renderDemo = () => (
+        <div className="card">
+            <div className="card-header"><h3 className="card-title">Demo Report Card</h3></div>
+            <div style={{ padding: '1rem' }}>
+                <p className="text-sm text-muted mb-4">
+                    Generate a sample report card with pre-filled data to see how the analytics and PDF generation will look
+                    when real student data is entered. This includes performance trends, subject comparisons, and personalized insights.
+                </p>
+                <div style={{ background: 'var(--gray-50)', padding: '1.5rem', borderRadius: 8, marginBottom: '1rem' }}>
+                    <h4 style={{ marginBottom: '0.5rem', color: 'var(--green-700)' }}>Demo Student Profile</h4>
+                    <div className="grid-2" style={{ fontSize: '0.9rem' }}>
+                        <div><strong>Name:</strong> James Omondi</div>
+                        <div><strong>Adm No:</strong> 2024001</div>
+                        <div><strong>Class:</strong> Form 2 East</div>
+                        <div><strong>Exam:</strong> End of Term 2 Examination 2024</div>
+                        <div><strong>Position:</strong> 3 out of 45</div>
+                        <div><strong>Mean Grade:</strong> B (74.6%)</div>
+                    </div>
+                </div>
+                <div style={{ background: 'var(--blue-50)', padding: '1rem', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
+                    <strong>Analytics Included:</strong>
+                    <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
+                        <li>Movement across exams (Term 1 → Mid Term → End Term)</li>
+                        <li>Subject performance with class mean comparison</li>
+                        <li>Grade mix distribution (A: 2, B: 4, C: 2)</li>
+                        <li>Strengths: Mathematics, Biology, English</li>
+                        <li>Focus areas: Geography, History</li>
+                        <li>Personalized advice based on performance</li>
+                    </ul>
+                </div>
+                <button
+                    className="btn btn-primary"
+                    onClick={handleDemoReport}
+                    disabled={downloading}
+                >
+                    {downloading ? <span className="spinner" /> : <><Download size={16} /> Download Demo Report Card</>}
+                </button>
+            </div>
+        </div>
+    );
+
     return (
         <>
             <div className="page-header">
@@ -480,6 +618,7 @@ export default function ReportCardsPage() {
                     {activeTab === 'generate' && renderGenerate()}
                     {activeTab === 'published' && renderPublished()}
                     {activeTab === 'download' && renderDownload()}
+                    {activeTab === 'demo' && renderDemo()}
                 </>
             )}
         </>

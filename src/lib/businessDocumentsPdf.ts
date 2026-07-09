@@ -31,10 +31,14 @@ export const businessDocuments: BusinessDocument[] = [
         title: 'NexaLMS Brochure',
         fileName: 'NexaLMS_Brochure',
         category: 'Company Documents',
-        summary: 'Executive overview of the NexaLMS software suite.',
+        summary: 'Revolutionary school management software built for the modern Kenyan institution.',
         sections: [
-            { heading: 'What Sets NexaLMS Apart?', body: ['Unlike clunky, outdated systems, NexaLMS centralizes everything dynamically. Manage admissions, teachers, daily attendance, dynamic timetables, comprehensive exams, instant analytics, and finance tracking in a single, blazing-fast web dashboard.'] },
-            { heading: 'Key Benefits for the Principal', body: ['- Generate detailed PDF report cards instantly for the entire school.', '- Real-time fee balance visibility and SMS/PDF reminders.', '- Polished, error-free academic grading completely aligned with the Kenyan curriculum.'] },
+            { heading: 'The NexaLMS Revolution', body: ['NexaLMS is not just another school management system—it is a complete digital transformation platform. Built on cutting-edge cloud architecture, it replaces fragmented spreadsheets, paper files, and disconnected software with one intelligent, unified ecosystem that learns and grows with your institution.'] },
+            { heading: 'Core Software Architecture', body: ['Cloud-Native Infrastructure: 99.9% uptime with automated daily backups and enterprise-grade encryption.', 'Real-Time Data Synchronization: Changes made anywhere reflect instantly across all authorized devices.', 'AI-Powered Analytics: Machine learning algorithms that identify performance trends, predict at-risk students, and optimize resource allocation automatically.'] },
+            { heading: 'Academic Excellence Engine', body: ['Smart Grading System: Automated grade calculation with customizable Kenyan curriculum-aligned rubrics.', 'Performance Analytics Dashboard: Visual charts showing student progress, subject-wise performance, and comparative class analytics.', 'Exam Management Module: Create, schedule, and conduct exams with automated result processing and instant PDF report card generation featuring personalized student insights.'] },
+            { heading: 'Financial Intelligence Suite', body: ['Fee Structure Automation: Dynamic fee setup with automatic balance calculations and payment tracking.', 'Integrated Payment Gateway: Seamless M-PESA and bank payment integration with real-time reconciliation.', 'Financial Reporting: Comprehensive income statements, fee collection analytics, and default prediction alerts.'] },
+            { heading: 'Administrative Command Center', body: ['Digital Admissions Portal: Paperless student enrollment with automated admission number generation and guardian linking.', 'Smart Attendance System: Biometric or mobile-based attendance with automated absenteeism alerts and pattern analysis.', 'AI Timetable Generator: Conflict-free timetable creation that optimizes teacher allocation and classroom utilization automatically.'] },
+            { heading: 'Why NexaLMS Wins', body: ['Zero Installation Required: Access from any device with a browser—no expensive hardware or IT maintenance needed.', 'Unlimited Scalability: From 50 to 50,000 students, the system performs consistently without degradation.', 'Kenyan Curriculum Native: Built specifically for 8-4-4 and CBC systems with local compliance and reporting standards.'] },
         ],
     },
     {
