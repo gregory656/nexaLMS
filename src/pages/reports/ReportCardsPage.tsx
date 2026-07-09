@@ -72,6 +72,101 @@ export default function ReportCardsPage() {
         return { subjects: studentRes, total, mean, grade: gs?.grade || '—', remarks: gs?.remarks || '' };
     };
 
+    const getStudentAnalytics = (studentId: string) => {
+        const studentRes = examResults.filter(r => r.student_id === studentId);
+        const currentMean = studentRes.length ? studentRes.reduce((s, r) => s + Number(r.marks || 0), 0) / studentRes.length : 0;
+
+        // History: Get exam movement from all available exams
+        const history: { examName: string; mean: number; grade?: string }[] = [];
+        const allExamsForStudent = results.filter(r => r.student_id === studentId);
+        const examGroups = allExamsForStudent.reduce((acc, r) => {
+            if (!acc[r.exam_id]) acc[r.exam_id] = [];
+            acc[r.exam_id].push(r);
+            return acc;
+        }, {} as Record<string, any[]>);
+
+        Object.entries(examGroups).forEach(([examId, examRes]) => {
+            const exam = exams.find(e => e.id === examId);
+            if (exam && Array.isArray(examRes)) {
+                const examMean = examRes.reduce((s, r) => s + Number(r.marks || 0), 0) / examRes.length;
+                const examGrade = getGrade(examMean);
+                history.push({ examName: exam.name, mean: examMean, grade: examGrade?.grade });
+            }
+        });
+
+        // Subject performance
+        const subjectPerformance = studentRes.map(r => {
+            const classSubjectResults = examResults.filter(er => er.subject_id === r.subject_id);
+            const classMean = classSubjectResults.length ? classSubjectResults.reduce((s, er) => s + Number(er.marks || 0), 0) / classSubjectResults.length : 0;
+            const grade = getGrade(Number(r.marks));
+            return {
+                subject: r.subjects?.name || 'Unknown',
+                marks: Number(r.marks),
+                grade: grade?.grade,
+                classMean
+            };
+        }).sort((a, b) => b.marks - a.marks);
+
+        // Grade mix across all subjects
+        const gradeMix: { grade: string; count: number }[] = [];
+        const gradeCounts = studentRes.reduce((acc, r) => {
+            const g = getGrade(Number(r.marks));
+            if (g?.grade) {
+                acc[g.grade] = (acc[g.grade] || 0) + 1;
+            }
+            return acc;
+        }, {} as Record<string, number>);
+        Object.entries(gradeCounts).forEach(([grade, count]) => {
+            gradeMix.push({ grade, count: Number(count) });
+        });
+
+        // Strengths: Top performing subjects (above class mean)
+        const strengths = subjectPerformance
+            .filter(s => s.marks >= (s.classMean || 0))
+            .slice(0, 3)
+            .map(s => s.subject);
+
+        // Focus: Subjects below class mean
+        const focus = subjectPerformance
+            .filter(s => s.marks < (s.classMean || 0))
+            .slice(0, 3)
+            .map(s => s.subject);
+
+        // Simple advice based on performance
+        let advice = 'Keep up the good work!';
+        if (currentMean < 50) {
+            advice = 'Focus on improving weak areas through extra practice and revision.';
+        } else if (currentMean < 70) {
+            advice = 'Good progress. Identify weak subjects and dedicate more study time.';
+        } else if (currentMean < 85) {
+            advice = 'Strong performance. Aim for consistency across all subjects.';
+        } else {
+            advice = 'Excellent work! Maintain high standards and help peers where possible.';
+        }
+
+        // Class mean for comparison
+        const classResults = examResults.filter(r => classStudents.some(s => s.id === r.student_id));
+        const classMean = classResults.length ? classResults.reduce((s, r) => s + Number(r.marks || 0), 0) / classResults.length : 0;
+
+        // Improvement from previous exam
+        let improvement: number | null = null;
+        if (history.length >= 2) {
+            const prevMean = history[history.length - 2].mean;
+            improvement = currentMean - prevMean;
+        }
+
+        return {
+            history,
+            subjectPerformance,
+            gradeMix,
+            strengths,
+            focus,
+            advice,
+            classMean,
+            improvement
+        };
+    };
+
     // Rank students by total marks (descending)
     const rankedStudents = classStudents
         .map(s => ({ ...s, report: getStudentReport(s.id) }))
@@ -85,6 +180,7 @@ export default function ReportCardsPage() {
         setDownloading(true);
         try {
             const report = getStudentReport(student.id);
+            const analytics = getStudentAnalytics(student.id);
             const position = rankedStudents.findIndex(s => s.id === student.id) + 1;
             const doc = await generateReportCardPdf({
                 school,
@@ -102,6 +198,7 @@ export default function ReportCardsPage() {
                 getGrade,
                 position,
                 totalStudents: classStudents.length,
+                analytics,
             });
             downloadPdf(doc, `report_${student.first_name}_${student.last_name}`);
             toast.success('Report card downloaded');
@@ -123,6 +220,7 @@ export default function ReportCardsPage() {
         for (const student of rankedStudents) {
             try {
                 const report = getStudentReport(student.id);
+                const analytics = getStudentAnalytics(student.id);
                 const position = rankedStudents.findIndex(s => s.id === student.id) + 1;
                 const doc = await generateReportCardPdf({
                     school,
@@ -140,6 +238,7 @@ export default function ReportCardsPage() {
                     getGrade,
                     position,
                     totalStudents: rankedStudents.length,
+                    analytics,
                 });
                 downloadPdf(doc, `report_${student.first_name}_${student.last_name}_${count + 1}`);
                 count++;
