@@ -1,6 +1,3 @@
-You're at the stage where features are no longer the priority—architecture is. If you structure these modules correctly now, you won't have to redesign them later. I'd organize the remaining work into six major modules with clearly defined sidebars.
-
-
 ---
 
 1. Examinations Module

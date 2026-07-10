@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { generateReportCardPdf, downloadPdf } from '../../lib/pdf';
 import {
     FileText, ClipboardList, Download, Eye, ToggleLeft, ToggleRight,
+    GraduationCap, Activity, Target, MessageSquare
 } from 'lucide-react';
 import HelpIcon from '../../components/ui/HelpIcon';
 
@@ -442,7 +443,16 @@ export default function ReportCardsPage() {
                         </div>
                     )}
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '1px solid var(--gray-200)', paddingTop: '1rem' }}>
+                    {/* Advanced Visual Analytics Dashboard */}
+                    {renderAnalyticsUI(
+                        getStudentAnalytics(previewStudent.id),
+                        previewStudent.report.grade,
+                        previewStudent.report.mean,
+                        previewStudent.position,
+                        rankedStudents.length
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '1px solid var(--gray-200)', paddingTop: '1rem', marginTop: '1.5rem' }}>
                         <div style={{ fontSize: '0.82rem' }}>
                             <p><strong>Class Teacher:</strong> _______________</p>
                             <p style={{ marginTop: 4 }}><strong>Principal:</strong> _______________</p>
@@ -550,43 +560,410 @@ export default function ReportCardsPage() {
         </div>
     );
 
-    const renderDemo = () => (
-        <div className="card">
-            <div className="card-header"><h3 className="card-title">Demo Report Card</h3></div>
-            <div style={{ padding: '1rem' }}>
-                <p className="text-sm text-muted mb-4">
-                    Generate a sample report card with pre-filled data to see how the analytics and PDF generation will look
-                    when real student data is entered. This includes performance trends, subject comparisons, and personalized insights.
-                </p>
-                <div style={{ background: 'var(--gray-50)', padding: '1.5rem', borderRadius: 8, marginBottom: '1rem' }}>
-                    <h4 style={{ marginBottom: '0.5rem', color: 'var(--green-700)' }}>Demo Student Profile</h4>
-                    <div className="grid-2" style={{ fontSize: '0.9rem' }}>
-                        <div><strong>Name:</strong> James Omondi</div>
-                        <div><strong>Adm No:</strong> 2024001</div>
-                        <div><strong>Class:</strong> Form 2 East</div>
-                        <div><strong>Exam:</strong> End of Term 2 Examination 2024</div>
-                        <div><strong>Position:</strong> 3 out of 45</div>
-                        <div><strong>Mean Grade:</strong> B (74.6%)</div>
+    const renderAnalyticsUI = (
+        analytics: any,
+        overallGrade: string,
+        overallMean: number,
+        position: number,
+        totalStudents: number
+    ) => {
+        if (!analytics) return null;
+
+        const chartColors = [
+            'rgb(16, 185, 129)', 'rgb(59, 130, 246)', 'rgb(245, 158, 11)', 'rgb(239, 68, 68)',
+            'rgb(139, 92, 246)', 'rgb(6, 182, 212)', 'rgb(236, 72, 153)', 'rgb(34, 197, 94)'
+        ];
+
+        // Line Chart history
+        const hist = analytics.history || [];
+        let pathPoints = '';
+        let fillPathPoints = '';
+        let dotElements: React.JSX.Element[] = [];
+
+        if (hist.length > 1) {
+            const width = 100;
+            const height = 40;
+            const paddingX = 8;
+            const paddingY = 8;
+            const plotW = width - (paddingX * 2);
+            const plotH = height - (paddingY * 2);
+
+            const points = hist.map((item: any, i: number) => {
+                const x = paddingX + (i / (hist.length - 1)) * plotW;
+                const valuePercent = Math.max(0, Math.min(item.mean, 100)) / 100;
+                const y = height - paddingY - (valuePercent * plotH);
+                return { x, y, mean: item.mean, examName: item.examName, grade: item.grade };
+            });
+
+            pathPoints = points.map((p: any) => `${p.x},${p.y}`).join(' ');
+            fillPathPoints = `${points[0].x},${height - paddingY} ` + pathPoints + ` ${points[points.length - 1].x},${height - paddingY}`;
+
+            dotElements = points.map((p: any, i: number) => (
+                <g key={i}>
+                    <circle cx={p.x} cy={p.y} r="2" fill="white" stroke="rgb(16, 185, 129)" strokeWidth="1" />
+                    <circle cx={p.x} cy={p.y} r="0.8" fill="rgb(16, 185, 129)" />
+                    <text x={p.x} y={p.y - 3} fontSize="1.8" fontWeight="bold" textAnchor="middle" fill="#1e293b">
+                        {p.mean.toFixed(0)}% ({p.grade || '—'})
+                    </text>
+                </g>
+            ));
+        }
+
+        // Donut items
+        const gradeMix = analytics.gradeMix || [];
+        const totalGradesCount = gradeMix.reduce((a: number, c: any) => a + Number(c.count), 0);
+        let accumulatedPercent = 0;
+        const donutSegments = gradeMix.map((g: any, idx: number) => {
+            const percent = totalGradesCount ? (g.count / totalGradesCount) * 100 : 0;
+            const strokeDash = `${percent} ${100 - percent}`;
+            const strokeOffset = 100 - accumulatedPercent + 25;
+            accumulatedPercent += percent;
+            return {
+                grade: g.grade,
+                count: g.count,
+                color: chartColors[idx % chartColors.length],
+                strokeDash,
+                strokeOffset
+            };
+        });
+
+        const marksVal = (analytics.subjectPerformance || []).map((s: any) => s.marks);
+        let consistency = 100;
+        if (marksVal.length > 0) {
+            const avg = marksVal.reduce((a: number, b: number) => a + b, 0) / marksVal.length;
+            const variance = marksVal.reduce((sum: number, mark: number) => sum + Math.pow(mark - avg, 2), 0) / marksVal.length;
+            consistency = Math.max(0, Math.min(100, 100 - Math.sqrt(variance)));
+        }
+        const potential = Math.min(100, (100 - overallMean) + (analytics.improvement || 0) * 2);
+
+        return (
+            <div style={{ marginTop: '2rem', borderTop: '2px dashed var(--gray-200)', paddingTop: '1.5rem', textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                    <div style={{ padding: '0.4rem', borderRadius: 8, background: 'rgb(240, 253, 244)', color: 'rgb(34, 197, 94)', display: 'flex' }}>
+                        <GraduationCap size={20} />
+                    </div>
+                    <div>
+                        <h4 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--gray-800)' }}>
+                            Student Performance Analytics
+                        </h4>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>Visual metrics, target alignments and tutor remarks</span>
                     </div>
                 </div>
-                <div style={{ background: 'var(--blue-50)', padding: '1rem', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
-                    <strong>Analytics Included:</strong>
-                    <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
-                        <li>Movement across exams (Term 1 → Mid Term → End Term)</li>
-                        <li>Subject performance with class mean comparison</li>
-                        <li>Grade mix distribution (A: 2, B: 4, C: 2)</li>
-                        <li>Strengths: Mathematics, Biology, English</li>
-                        <li>Focus areas: Geography, History</li>
-                        <li>Personalized advice based on performance</li>
-                    </ul>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem', marginBottom: '1.25rem' }}>
+                    {/* Line Chart card */}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569' }}>Academic Progress</span>
+                            <span style={{ fontSize: '0.7rem', background: '#ecfdf5', color: '#10b981', padding: '0.1rem 0.4rem', borderRadius: 9999, fontWeight: 'bold' }}>
+                                {analytics.improvement != null ? `${analytics.improvement >= 0 ? '+' : ''}${analytics.improvement.toFixed(1)}% Change` : 'Stable'}
+                            </span>
+                        </div>
+                        <div style={{ flex: 1, minHeight: 110, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {hist.length > 1 ? (
+                                <svg viewBox="0 0 100 40" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+                                    <line x1="5" y1="8" x2="95" y2="8" stroke="#f1f5f9" strokeWidth="0.5" />
+                                    <line x1="5" y1="20" x2="95" y2="20" stroke="#f1f5f9" strokeWidth="0.5" />
+                                    <line x1="5" y1="32" x2="95" y2="32" stroke="#f1f5f9" strokeWidth="0.5" />
+                                    <polygon points={fillPathPoints} fill="rgba(16, 185, 129, 0.08)" />
+                                    <polyline fill="none" stroke="rgb(16, 185, 129)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" points={pathPoints} />
+                                    {dotElements}
+                                </svg>
+                            ) : (
+                                <div style={{ fontSize: '0.8rem', color: '#94a3b8', textAlign: 'center' }}>Insufficient historical data for trend line</div>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#64748b', marginTop: '0.5rem' }}>
+                            {hist.map((item: any, i: number) => (
+                                <span key={i} style={{ maxWidth: 50, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.examName}>
+                                    {item.examName.split(' ')[0]}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Bar Chart card */}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#475569', display: 'block', marginBottom: '0.75rem' }}>
+                            Subject Comparison
+                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {(analytics.subjectPerformance || []).slice(0, 4).map((sub: any, i: number) => {
+                                const studentW = Math.min(100, Math.max(0, sub.marks));
+                                const classW = Math.min(100, Math.max(0, sub.classMean || sub.marks));
+                                return (
+                                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
+                                            <span style={{ fontWeight: '600', color: '#334155' }}>{sub.subject}</span>
+                                            <span style={{ fontWeight: 'bold', color: '#0f172a' }}>{sub.marks}% <span style={{ fontWeight: 'normal', color: '#64748b' }}>vs {Math.round(sub.classMean || 0)}%</span></span>
+                                        </div>
+                                        <div style={{ position: 'relative', height: 7, borderRadius: 9999, background: '#e2e8f0', overflow: 'hidden' }}>
+                                            <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${classW}%`, background: '#cbd5e1', borderRadius: 9999 }} />
+                                            <div style={{ position: 'absolute', left: 0, top: 1.5, height: 4, width: `${studentW}%`, background: chartColors[i % chartColors.length], borderRadius: 9999 }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', marginTop: '0.6rem', justifyContent: 'flex-end', fontSize: '0.6rem', color: '#64748b' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#64748b' }} /> Class Avg
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgb(59, 130, 246)' }} /> Student
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Donut Chart card */}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', width: 75, height: 75, flexShrink: 0 }}>
+                            <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                                <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#e2e8f0" strokeWidth="2.8" />
+                                {totalGradesCount > 0 ? (
+                                    donutSegments.map((seg: any, i: number) => (
+                                        <circle
+                                            key={i}
+                                            cx="18"
+                                            cy="18"
+                                            r="15.915"
+                                            fill="transparent"
+                                            stroke={seg.color}
+                                            strokeWidth="3.2"
+                                            strokeDasharray={seg.strokeDash}
+                                            strokeDashoffset={seg.strokeOffset}
+                                            strokeLinecap="round"
+                                        />
+                                    ))
+                                ) : (
+                                    <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#94a3b8" strokeWidth="2" strokeDasharray="100 0" />
+                                )}
+                            </svg>
+                            <div style={{
+                                position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--green-700)', lineHeight: '1' }}>{overallGrade}</span>
+                                <span style={{ fontSize: '0.55rem', color: '#64748b', fontWeight: 'bold' }}>Grade</span>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569', marginBottom: '0.25rem' }}>Grade Mix</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 0.5rem', fontSize: '0.65rem' }}>
+                                {donutSegments.slice(0, 6).map((seg: any, i: number) => (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#334155' }}>
+                                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />
+                                        <strong>{seg.grade}</strong>: {seg.count}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <button
-                    className="btn btn-primary"
-                    onClick={handleDemoReport}
-                    disabled={downloading}
-                >
-                    {downloading ? <span className="spinner" /> : <><Download size={16} /> Download Demo Report Card</>}
-                </button>
+
+                {/* KPI Gauges list */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
+                    {[
+                        { label: 'Overall Average', val: `${overallMean.toFixed(1)}%`, desc: `Grade of ${overallGrade}`, color: '#10b981' },
+                        { label: 'Class Rank position', val: `#${position}`, desc: `Out of ${totalStudents} students`, color: '#3b82f6' },
+                        { label: 'Consistency Index', val: `${consistency.toFixed(0)}%`, desc: marksVal.length > 0 ? 'Variance dispersion' : 'No marks logged', color: '#f59e0b' },
+                        { label: 'Success Potential', val: `${potential.toFixed(0)}%`, desc: 'Predicted curve margin', color: '#8b5cf6' },
+                    ].map((gauge: any, i: number) => (
+                        <div key={i} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0.75rem', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '500', marginBottom: '0.25rem' }}>{gauge.label}</span>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: gauge.color, margin: '2px 0' }}>{gauge.val}</span>
+                            <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>{gauge.desc}</span>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Insights Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.88rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#16a34a', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                            <Activity size={14} /> Subject Strengths
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {(analytics.strengths || []).length > 0 ? (
+                                (analytics.strengths || []).map((sub: string, i: number) => (
+                                    <span key={i} style={{ background: '#dcfce7', color: '#15803d', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: 4, fontWeight: 'bold' }}>
+                                        {sub}
+                                    </span>
+                                ))
+                            ) : (
+                                <span style={{ fontSize: '0.7rem', color: '#15803d' }}>Aim to exceed term subject benchmarks.</span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div style={{ background: '#fffbeb', border: '1px solid #fef08a', borderRadius: 8, padding: '0.88rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#ca8a04', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                            <Target size={14} /> Revision Focus Areas
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                            {(analytics.focus || []).length > 0 ? (
+                                (analytics.focus || []).map((sub: string, i: number) => (
+                                    <span key={i} style={{ background: '#fef9c3', color: '#854d0e', fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: 4, fontWeight: 'bold' }}>
+                                        {sub}
+                                    </span>
+                                ))
+                            ) : (
+                                <span style={{ fontSize: '0.7rem', color: '#854d0e' }}>Optimal performance across subjects!</span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '0.88rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#2563eb', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
+                            <MessageSquare size={14} /> Tutor Advisory Action
+                        </div>
+                        <p style={{ fontSize: '0.7rem', color: '#1e40af', margin: 0, lineHeight: '1.4', fontStyle: 'italic' }}>
+                            "{analytics.advice || 'Perform consistent reviews prior to the subsequent tests.'}"
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderDemo = () => (
+        <div className="card">
+            <div className="card-header"><h3 className="card-title">Demo Report Card Preview</h3></div>
+            <div style={{ padding: '1rem' }}>
+                <p className="text-sm text-muted mb-4">
+                    Explore our visual student analytics dashboard mockup below, which shows a complete performance analysis
+                    and diagnostic insights. Scroll below to review graphs before downloading.
+                </p>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem', background: 'var(--blue-50)', padding: '1rem', borderRadius: 8, fontSize: '0.85rem' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                        <h4 style={{ marginBottom: '0.5rem', color: 'var(--blue-700)', fontWeight: 'bold' }}> James Omondi (Form 2 East)</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 0.5rem', fontSize: '0.82rem' }}>
+                            <div><strong>Adm No:</strong> 2024001</div>
+                            <div><strong>Rank:</strong> 3 out of 45</div>
+                            <div><strong>Exam:</strong> End of Term 2</div>
+                            <div><strong>Mean score:</strong> 74.4% (Grade B)</div>
+                        </div>
+                    </div>
+                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                        <button
+                            className="btn btn-primary"
+                            onClick={handleDemoReport}
+                            disabled={downloading}
+                        >
+                            {downloading ? <span className="spinner" /> : <><Download size={16} /> Download Demo PDF</>}
+                        </button>
+                    </div>
+                </div>
+
+                <div style={{ marginTop: '1.5rem', borderTop: '2px solid var(--gray-200)', paddingTop: '2rem' }}>
+                    <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                        <span style={{ background: 'var(--green-100)', color: 'var(--green-800)', padding: '0.25rem 0.75rem', borderRadius: 9999, fontSize: '0.8rem', fontWeight: 'bold' }}>
+                            LIVE REPORT CARD PREVIEW
+                        </span>
+                        <h4 style={{ marginTop: '0.5rem', color: 'var(--gray-700)', margin: '4px 0 0 0' }}>Interactive Principal Dashboard</h4>
+                    </div>
+
+                    <div className="card" style={{ border: '2px solid var(--green-200)', maxWidth: 750, margin: '0 auto', background: '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.06)', padding: '1.5rem' }}>
+                        <div style={{ display: 'flex', gap: '1rem', borderBottom: '2px solid var(--gray-200)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+                            <div style={{ textAlign: 'center', flex: 1 }}>
+                                {school?.logo_url && <img src={school.logo_url} alt="" style={{ width: 60, height: 60, borderRadius: 8, margin: '0 auto 0.5rem' }} />}
+                                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>NexaGen Academy</h2>
+                                <p className="text-sm text-muted" style={{ margin: '4px 0 0 0' }}>Excellence Through Innovation</p>
+                                <h3 style={{ marginTop: 12, color: 'var(--green-700)', fontSize: '1.05rem', fontWeight: 'bold' }}>STUDENT REPORT CARD</h3>
+                            </div>
+                        </div>
+
+                        <div className="grid-2 mb-4" style={{ fontSize: '0.88rem', gap: '1rem' }}>
+                            <div><strong>Name:</strong> James Omondi</div>
+                            <div><strong>Adm No:</strong> 2024001</div>
+                            <div><strong>Class:</strong> Form 2 East</div>
+                            <div><strong>Exam:</strong> End of Term 2 Examination 2024</div>
+                            <div><strong>Position:</strong> 3 out of 45</div>
+                        </div>
+
+                        <div className="table-wrapper mb-4">
+                            <table className="data-table">
+                                <thead><tr><th>Subject</th><th>Marks</th><th>Grade</th><th>Remarks</th></tr></thead>
+                                <tbody>
+                                    {[
+                                        { name: 'Mathematics', marks: 85, grade: 'A', remarks: 'Excellent' },
+                                        { name: 'English', marks: 78, grade: 'B', remarks: 'Very Good' },
+                                        { name: 'Kiswahili', marks: 72, grade: 'B', remarks: 'Very Good' },
+                                        { name: 'Chemistry', marks: 68, grade: 'C', remarks: 'Good' },
+                                        { name: 'Physics', marks: 75, grade: 'B', remarks: 'Very Good' },
+                                        { name: 'Biology', marks: 82, grade: 'A', remarks: 'Excellent' },
+                                        { name: 'History', marks: 70, grade: 'B', remarks: 'Very Good' },
+                                        { name: 'Geography', marks: 65, grade: 'C', remarks: 'Good' }
+                                    ].map((r: any, i: number) => (
+                                        <tr key={i}>
+                                            <td>{r.name}</td>
+                                            <td><strong>{r.marks}</strong></td>
+                                            <td><span className="badge badge-green">{r.grade}</span></td>
+                                            <td className="text-sm text-muted">{r.remarks}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="grid-2 mb-4" style={{ fontSize: '0.95rem', background: 'var(--gray-50)', padding: '1rem', borderRadius: 8, gap: '1rem' }}>
+                            <div><strong>Total Marks:</strong> 595</div>
+                            <div><strong>Mean:</strong> 74.4%</div>
+                            <div><strong>Overall Grade:</strong> <span className="badge badge-green">B</span></div>
+                            <div><strong>Subjects:</strong> 8</div>
+                        </div>
+
+                        <div style={{ background: 'var(--warning-light)', padding: '0.75rem 1rem', borderRadius: 8, marginBottom: '1rem', fontSize: '0.85rem' }}>
+                            <strong>Fee Balance:</strong> KES 15,000 (updated as of today)
+                        </div>
+
+                        {renderAnalyticsUI(
+                            {
+                                history: [
+                                    { examName: 'Term 1 Exam 2024', mean: 68.5, grade: 'C' },
+                                    { examName: 'Mid Term 2 2024', mean: 74.2, grade: 'B' },
+                                    { examName: 'End of Term 2 2024', mean: 76.9, grade: 'B' },
+                                ],
+                                subjectPerformance: [
+                                    { subject: 'Mathematics', marks: 85, classMean: 78, grade: 'A' },
+                                    { subject: 'Biology', marks: 82, classMean: 76, grade: 'A' },
+                                    { subject: 'English', marks: 78, classMean: 70, grade: 'B' },
+                                    { subject: 'Physics', marks: 75, classMean: 72, grade: 'B' },
+                                    { subject: 'Kiswahili', marks: 72, classMean: 68, grade: 'B' },
+                                    { subject: 'History', marks: 70, classMean: 73, grade: 'B' },
+                                    { subject: 'Chemistry', marks: 68, classMean: 64, grade: 'C' },
+                                    { subject: 'Geography', marks: 65, classMean: 68, grade: 'C' }
+                                ],
+                                gradeMix: [
+                                    { grade: 'A', count: 2 },
+                                    { grade: 'B', count: 4 },
+                                    { grade: 'C', count: 2 },
+                                ],
+                                strengths: ['Mathematics', 'Biology', 'English'],
+                                focus: ['Geography', 'History'],
+                                advice: 'Strong performance in sciences and languages. Focus on improving humanities subjects for balanced excellence.',
+                                classMean: 71.9,
+                                improvement: 2.7,
+                            },
+                            'B',
+                            74.4,
+                            3,
+                            45
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '1px solid var(--gray-200)', paddingTop: '1rem', marginTop: '1.5rem' }}>
+                            <div style={{ fontSize: '0.82rem' }}>
+                                <p style={{ margin: 0 }}><strong>Class Teacher:</strong> _______________</p>
+                                <p style={{ marginTop: 4, margin: '4px 0 0 0' }}><strong>Principal:</strong> _______________</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button className="btn btn-primary btn-sm" onClick={handleDemoReport} disabled={downloading}>
+                                    {downloading ? <span className="spinner" /> : <><Download size={14} /> Download PDF</>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
