@@ -33,6 +33,7 @@ import ReportCardsPage from './pages/reports/ReportCardsPage';
 import AttendancePage from './pages/attendance/AttendancePage';
 import FinancePage from './pages/finance/FinancePage';
 import DocumentationPage from './pages/documents/DocumentationPage';
+import QuotationsPage from './pages/documents/QuotationsPage';
 import SitePage from './pages/site/SitePage';
 import ContactPage from './pages/site/ContactPage';
 
@@ -132,6 +133,7 @@ export default function App() {
                 {/* Administration */}
                 <Route path="roles" element={<RolesPage />} />
                 <Route path="subscription" element={<SubscriptionPage />} />
+                <Route path="quotations" element={<QuotationsPage />} />
                 <Route path="documentation" element={<DocumentationPage />} />
                 <Route path="announcements" element={<Placeholder title="Announcements" />} />
                 <Route path="settings" element={<SetupPage />} />

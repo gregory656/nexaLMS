@@ -64,10 +64,16 @@ const navSections = [
         ]
     },
     {
+        title: 'Documents',
+        items: [
+            { to: '/quotations', icon: FileText, label: 'Quotations' },
+            { to: '/documentation', icon: FileText, label: 'Agreements & Docs' },
+        ]
+    },
+    {
         title: 'Support',
         items: [
             { to: 'help', icon: HelpCircle, label: 'Help Centre', action: 'open-help' },
-            { to: '/documentation', icon: FileText, label: 'Documents' },
             { to: '/site', icon: Globe2, label: 'Visit Site' },
         ]
     }

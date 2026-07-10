@@ -216,3 +216,288 @@ export async function downloadBusinessDocument(documentItem: BusinessDocument) {
     const doc = await generateBusinessDocumentPdf(documentItem);
     downloadPdf(doc, documentItem.fileName);
 }
+
+// Quotation Types
+export type QuotationItem = {
+    description: string;
+    amount: number;
+};
+
+export type Quotation = {
+    id: string;
+    quotationNumber: string;
+    dateIssued: string;
+    validUntil: string;
+    preparedBy: string;
+    referenceNumber?: string;
+    status: 'pending' | 'accepted' | 'rejected' | 'expired';
+    schoolInfo: {
+        name: string;
+        principalName: string;
+        address: string;
+        email: string;
+        phone: string;
+    };
+    items: QuotationItem[];
+    normalAmount: number;
+    discountAmount: number;
+    finalAmount: number;
+    terms: string[];
+};
+
+export async function generateQuotationPdf(quotation: Quotation) {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 16;
+    let y = 18;
+
+    const footer = () => {
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text('NexaGen Technologies | NexaLMS', margin, pageHeight - 10);
+        doc.text('www.nexagen.co.ke | +254 719 637 416', pageWidth - margin, pageHeight - 10, { align: 'right' });
+        doc.setTextColor(0);
+    };
+
+    // Watermark
+    doc.setTextColor(245, 250, 248);
+    doc.setFontSize(80);
+    doc.setFont('helvetica', 'bold');
+    doc.text('NEXAGEN', pageWidth / 2, pageHeight / 2, { align: 'center', angle: -45 });
+
+    // Header
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, pageWidth, 45, 'F');
+    doc.setFillColor(16, 185, 129);
+    doc.rect(0, 45, pageWidth, 2, 'F');
+
+    doc.setTextColor(255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(24);
+    doc.text('QUOTATION', margin, 22);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text('NexaGen Technologies', margin, 30);
+    doc.setFontSize(9);
+    doc.text('Official Business Proposal', margin, 36);
+
+    // Quotation details in header
+    doc.setTextColor(255);
+    doc.setFontSize(9);
+    doc.text(`Quotation No: ${quotation.quotationNumber}`, pageWidth - margin, 22, { align: 'right' });
+    doc.text(`Date: ${quotation.dateIssued}`, pageWidth - margin, 28, { align: 'right' });
+    doc.text(`Valid Until: ${quotation.validUntil}`, pageWidth - margin, 34, { align: 'right' });
+
+    doc.setTextColor(0);
+    y = 55;
+
+    // School Information
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(4, 120, 87);
+    doc.text('SCHOOL INFORMATION', margin, y);
+    y += 6;
+
+    doc.setDrawColor(209, 250, 229);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, margin + 40, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    doc.text(`School Name: ${quotation.schoolInfo.name}`, margin, y); y += 5;
+    doc.text(`Principal: ${quotation.schoolInfo.principalName}`, margin, y); y += 5;
+    doc.text(`Address: ${quotation.schoolInfo.address}`, margin, y); y += 5;
+    doc.text(`Email: ${quotation.schoolInfo.email}`, margin, y); y += 5;
+    doc.text(`Phone: ${quotation.schoolInfo.phone}`, margin, y); y += 8;
+
+    if (quotation.referenceNumber) {
+        doc.text(`Reference: ${quotation.referenceNumber}`, margin, y); y += 8;
+    }
+
+    // Pricing Table
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(4, 120, 87);
+    doc.text('PRICING DETAILS', margin, y);
+    y += 6;
+
+    doc.setDrawColor(209, 250, 229);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, margin + 40, y);
+    y += 5;
+
+    // Table header
+    doc.setFillColor(240, 249, 245);
+    doc.rect(margin, y, pageWidth - margin * 2, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Description', margin + 2, y + 5);
+    doc.text('Amount (KES)', pageWidth - margin - 2, y + 5, { align: 'right' });
+    y += 8;
+
+    // Table rows
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    quotation.items.forEach((item, index) => {
+        if (index % 2 === 0) {
+            doc.setFillColor(255, 255, 255);
+        } else {
+            doc.setFillColor(248, 250, 252);
+        }
+        doc.rect(margin, y, pageWidth - margin * 2, 7, 'F');
+        doc.setTextColor(51, 65, 85);
+        doc.text(item.description, margin + 2, y + 5);
+        doc.text(item.amount.toLocaleString(), pageWidth - margin - 2, y + 5, { align: 'right' });
+        y += 7;
+    });
+
+    y += 5;
+
+    // Summary
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Normal Setup & Training Fee: KES ${quotation.normalAmount.toLocaleString()}`, margin, y); y += 5;
+    doc.setTextColor(220, 38, 38);
+    doc.text(`Founding Partner Discount: KES ${quotation.discountAmount.toLocaleString()}`, margin, y); y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(4, 120, 87);
+    doc.text(`Amount Payable: KES ${quotation.finalAmount.toLocaleString()} (One-Time Only)`, margin, y); y += 8;
+
+    // Note
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    const note = 'This one-time implementation fee covers system setup, onboarding, initial configuration, administrator account creation, branding, and staff training. It is payable only once during the initial deployment of NexaLMS.';
+    y = addWrappedText(doc, note, margin, y, pageWidth - margin * 2) + 8;
+
+    // Subscription Charges Section
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(4, 120, 87);
+    doc.text('SUBSCRIPTION CHARGES', margin, y);
+    y += 6;
+
+    doc.setDrawColor(209, 250, 229);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, margin + 40, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(51, 65, 85);
+    const subscriptionNote = 'Subscription charges are governed separately under the Service Agreement and are not included in this quotation unless specifically stated.';
+    y = addWrappedText(doc, subscriptionNote, margin, y, pageWidth - margin * 2) + 8;
+
+    // Terms
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(4, 120, 87);
+    doc.text('TERMS AND CONDITIONS', margin, y);
+    y += 6;
+
+    doc.setDrawColor(209, 250, 229);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, margin + 40, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(51, 65, 85);
+    quotation.terms.forEach(term => {
+        y = addWrappedText(doc, `• ${term}`, margin, y, pageWidth - margin * 2) + 3;
+    });
+    y += 5;
+
+    // Check if we need a new page for signatures
+    if (y > pageHeight - 80) {
+        footer();
+        doc.addPage();
+        y = 25;
+
+        // Reapply watermark
+        doc.setTextColor(245, 250, 248);
+        doc.setFontSize(80);
+        doc.setFont('helvetica', 'bold');
+        doc.text('NEXAGEN', pageWidth / 2, pageHeight / 2, { align: 'center', angle: -45 });
+    }
+
+    // Acceptance Section
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(4, 120, 87);
+    doc.text('ACCEPTANCE', margin, y);
+    y += 6;
+
+    doc.setDrawColor(209, 250, 229);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, margin + 40, y);
+    y += 8;
+
+    // Left side - School Representative
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Accepted By - School Representative', margin, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(51, 65, 85);
+    doc.text('Name: _______________________', margin, y); y += 5;
+    doc.text('Designation: __________________', margin, y); y += 5;
+    doc.text('Signature: ____________________', margin, y); y += 5;
+    doc.text('Date: ________________________', margin, y); y += 8;
+
+    // School Stamp Box
+    doc.setDrawColor(200);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, y, 50, 30);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('School Rubber Stamp', margin + 25, y + 15, { align: 'center' });
+    y += 35;
+
+    // Right side - NexaGen Representative
+    const rightX = pageWidth - margin - 60;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Prepared By - NexaGen Technologies', rightX, y);
+    y += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(51, 65, 85);
+    doc.text('Representative', rightX, y); y += 5;
+    doc.text('Name: _______________________', rightX, y); y += 5;
+    doc.text('Signature: ____________________', rightX, y); y += 5;
+    doc.text('Date: ________________________', rightX, y); y += 8;
+
+    // Footer line
+    y += 5;
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(1);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100);
+    doc.text('This quotation is valid for 30 days from the date of issue.', pageWidth / 2, y, { align: 'center' });
+
+    footer();
+    return doc;
+}
+
+export async function downloadQuotationPdf(quotation: Quotation) {
+    const doc = await generateQuotationPdf(quotation);
+    const fileName = `Quotation_${quotation.schoolInfo.name.replace(/\s+/g, '_')}_${quotation.quotationNumber}`;
+    downloadPdf(doc, fileName);
+}
