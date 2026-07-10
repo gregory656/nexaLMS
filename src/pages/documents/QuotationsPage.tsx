@@ -17,6 +17,34 @@ export default function QuotationsPage() {
     const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null);
     const [previewQuotation, setPreviewQuotation] = useState<Quotation | null>(null);
 
+    // Download blank template (hard copy)
+    const downloadBlankTemplate = () => {
+        const blankQuotation: Quotation = {
+            id: 'template',
+            quotationNumber: 'Q____',
+            dateIssued: '____/____/____',
+            validUntil: '____/____/____',
+            preparedBy: 'NexaGen Technologies',
+            referenceNumber: '',
+            status: 'pending',
+            schoolInfo: {
+                name: '_________________________________________________',
+                principalName: '_________________________________________________',
+                address: '_________________________________________________',
+                email: '_________________________________________________',
+                phone: '_________________________________________________'
+            },
+            items: [
+                { description: 'Founding Partner One-Time Setup & Training Fee', amount: 1250 }
+            ],
+            normalAmount: 2000,
+            discountAmount: 750,
+            finalAmount: 1250,
+            terms: defaultTerms
+        };
+        downloadQuotationPdf(blankQuotation);
+    };
+
     // Form state
     const [formData, setFormData] = useState({
         schoolName: '',
@@ -438,9 +466,14 @@ export default function QuotationsPage() {
                     <h1 className="page-title">Quotations</h1>
                     <p className="page-subtitle">Manage and generate professional quotations for schools</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-                    <Plus size={16} /> New Quotation
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button className="btn btn-secondary" onClick={downloadBlankTemplate}>
+                        <Download size={16} /> Download Blank Template
+                    </button>
+                    <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+                        <Plus size={16} /> New Quotation
+                    </button>
+                </div>
             </div>
 
             {quotations.length === 0 ? (
@@ -448,9 +481,14 @@ export default function QuotationsPage() {
                     <FileText size={48} />
                     <h3>No Quotations Yet</h3>
                     <p>Create your first quotation to get started</p>
-                    <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-                        <Plus size={16} /> Create Quotation
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                        <button className="btn btn-secondary" onClick={downloadBlankTemplate}>
+                            <Download size={16} /> Download Blank Template
+                        </button>
+                        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+                            <Plus size={16} /> Create Quotation
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <div className="table-container">

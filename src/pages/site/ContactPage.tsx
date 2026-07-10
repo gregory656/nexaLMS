@@ -80,7 +80,7 @@ export default function ContactPage() {
         {
             icon: CreditCard,
             label: 'Bank Transfer',
-            lines: ['Account: 1339185396', 'Name: STEPHEN OTIENO'],
+            lines: ['Account: 1339185296', 'Name: STEPHEN OTIENO'],
             accent: '#8b5cf6',
         },
     ];

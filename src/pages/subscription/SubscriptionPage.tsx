@@ -138,7 +138,7 @@ export default function SubscriptionPage() {
                             <div className="subscription-payment-grid">
                                 <div><strong>Paybill</strong><span>522522</span></div>
                                 <div><strong>Account</strong><span>1339185296</span></div>
-                                <div><strong>Bank Transfer</strong><span>1339185396</span></div>
+                                <div><strong>Bank Transfer</strong><span>1339185296</span></div>
                                 <div><strong>Name</strong><span>STEPHEN OTIENO</span></div>
                             </div>
                         </div>

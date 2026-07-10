@@ -66,7 +66,7 @@ const navSections = [
     {
         title: 'Documents',
         items: [
-            { to: '/quotations', icon: FileText, label: 'Quotations' },
+            { to: '/quotations', icon: FileText, label: 'Quotations', adminOnly: true },
             { to: '/documentation', icon: FileText, label: 'Agreements & Docs' },
         ]
     },
@@ -123,8 +123,13 @@ export default function Sidebar() {
                     {navSections.map(section => (
                         <div key={section.title} className="sidebar-section">
                             <div className="sidebar-section-title">{section.title}</div>
-                            {section.items.map(item => (
-                                item.action === 'open-help' ? (
+                            {section.items.map(item => {
+                                // Hide admin-only items unless user is admin@gmail.com
+                                if (item.adminOnly && user?.email !== 'admin@gmail.com') {
+                                    return null;
+                                }
+
+                                return item.action === 'open-help' ? (
                                     <button
                                         key={item.to}
                                         className="sidebar-item"
@@ -171,8 +176,8 @@ export default function Sidebar() {
                                         <item.icon />
                                         <span>{item.label}</span>
                                     </NavLink>
-                                )
-                            ))}
+                                );
+                            })}
                         </div>
                     ))}
                 </nav>

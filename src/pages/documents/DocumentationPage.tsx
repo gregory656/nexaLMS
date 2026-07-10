@@ -30,7 +30,7 @@ export default function DocumentationPage() {
                     <span>M-PESA: 0719637416</span>
                     <span>Paybill: 522522</span>
                     <span>Account: 1339185296</span>
-                    <span>Bank: 1339185396</span>
+                    <span>Bank: 1339185296</span>
                     <small>Both names: STEPHEN OTIENO</small>
                 </div>
             </div>

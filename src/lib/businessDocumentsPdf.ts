@@ -25,7 +25,7 @@ export const businessDocuments: BusinessDocument[] = [
             { heading: 'Our Flagship Solution', body: ['NexaLMS represents the pinnacle of educational technology innovation—a comprehensive digital ecosystem that unifies student information management, academic operations, financial tracking, and institutional analytics into one seamless, intelligent platform. Built for scalability, security, and ease of use, it serves institutions ranging from 50 to 50,000 learners without performance degradation.'] },
             { heading: 'Technical Excellence', body: ['Cloud-Native Architecture: 99.9% uptime with automated failover and geographic redundancy.', 'Enterprise Security: AES-256 encryption at rest and in transit, compliant with Kenya Data Protection Act.', 'Real-Time Processing: Sub-second data synchronization across all authorized devices and users.', 'AI-Powered Insights: Machine learning algorithms for predictive analytics and intelligent resource optimization.'] },
             { heading: 'Our Vision & Mission', body: ['Vision: To become the digital backbone of Kenyan education infrastructure.', 'Mission: To empower institutions to run clean, data-driven operations through world-class cloud technologies while ensuring complete data sovereignty and security.'] },
-            { heading: 'Official Payment Channels', body: ['M-PESA Number: 0719637416 - STEPHEN OTIENO', 'M-PESA Paybill: 522522, Account Number: 1339185296', 'Bank Transfer (KCB/Equity): Account 1339185396 - STEPHEN OTIENO'] },
+            { heading: 'Official Payment Channels', body: ['M-PESA Number: 0719637416 - STEPHEN OTIENO', 'M-PESA Paybill: 522522, Account Number: 1339185296', 'Bank Transfer (KCB/Equity): Account 1339185296 - STEPHEN OTIENO'] },
         ],
     },
     {

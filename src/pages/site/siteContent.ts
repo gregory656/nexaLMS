@@ -71,7 +71,7 @@ export const sitePages: SitePage[] = [
         eyebrow: 'Sales and support',
         description: 'Book a demo, request a proposal, or ask for onboarding guidance using the official NexaGen contacts.',
         icon: Phone,
-        bullets: ['Phone and WhatsApp: +254 719 637 416', 'M-PESA: 0719637416 - STEPHEN OTIENO', 'Paybill: 522522, Account: 1339185296', 'Bank Transfer: 1339185396 - STEPHEN OTIENO'],
+        bullets: ['Phone and WhatsApp: +254 719 637 416', 'M-PESA: 0719637416 - STEPHEN OTIENO', 'Paybill: 522522, Account: 1339185296', 'Bank Transfer: 1339185296 - STEPHEN OTIENO'],
     },
     {
         slug: 'privacy-policy',
