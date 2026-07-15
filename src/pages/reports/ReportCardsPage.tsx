@@ -31,6 +31,7 @@ export default function ReportCardsPage() {
     const [selectedExam, setSelectedExam] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedStudent, setSelectedStudent] = useState('');
+    const [selectedTheme, setSelectedTheme] = useState('Classic White');
     const [includeFeeBalance, setIncludeFeeBalance] = useState(false);
     const [downloading, setDownloading] = useState(false);
 
@@ -202,6 +203,7 @@ export default function ReportCardsPage() {
                 feeBalance: student.fee_balance,
                 feeTimestamp: student.fee_balance_updated_at,
                 includeFeeBalance,
+                theme: selectedTheme,
                 getGrade,
                 position,
                 totalStudents: classStudents.length,
@@ -242,6 +244,7 @@ export default function ReportCardsPage() {
                     feeBalance: student.fee_balance,
                     feeTimestamp: student.fee_balance_updated_at,
                     includeFeeBalance,
+                    theme: selectedTheme,
                     getGrade,
                     position,
                     totalStudents: rankedStudents.length,
@@ -335,6 +338,7 @@ export default function ReportCardsPage() {
                 feeBalance: demoStudent.fee_balance,
                 feeTimestamp: demoStudent.fee_balance_updated_at,
                 includeFeeBalance: true,
+                theme: selectedTheme,
                 getGrade,
                 position: 3,
                 totalStudents: 45,
@@ -379,6 +383,16 @@ export default function ReportCardsPage() {
                         <select className="form-select" value={selectedStudent} onChange={e => setSelectedStudent(e.target.value)}>
                             <option value="">All Students</option>
                             {classStudents.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div className="grid-2 mt-3">
+                    <div className="form-group">
+                        <label className="form-label">Theme</label>
+                        <select className="form-select" value={selectedTheme} onChange={e => setSelectedTheme(e.target.value)}>
+                            {['Classic White', 'Cream', 'Light Blue', 'Soft Green', 'Light Pink', 'Light Grey'].map(t => (
+                                <option key={t} value={t}>{t}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -534,6 +548,16 @@ export default function ReportCardsPage() {
                         <select className="form-select" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
                             <option value="">Choose Class</option>
                             {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div className="grid-2 mb-4">
+                    <div className="form-group">
+                        <label className="form-label">Theme</label>
+                        <select className="form-select" value={selectedTheme} onChange={e => setSelectedTheme(e.target.value)}>
+                            {['Classic White', 'Cream', 'Light Blue', 'Soft Green', 'Light Pink', 'Light Grey'].map(t => (
+                                <option key={t} value={t}>{t}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
