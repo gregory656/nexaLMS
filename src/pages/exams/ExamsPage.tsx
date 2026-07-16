@@ -72,6 +72,23 @@ export default function ExamsPage() {
     const [analyticsDownloading, setAnalyticsDownloading] = useState(false);
     const [analyticsTab, setAnalyticsTab] = useState<'school' | 'classes' | 'subject' | 'trs' | 'gender' | 'individual'>('school');
 
+    const fetchExamResults = async () => {
+        if (!school?.id) return [];
+        const rows: any[] = [];
+        const pageSize = 1000;
+        for (let from = 0; ; from += pageSize) {
+            const { data, error } = await supabase
+                .from('exam_results')
+                .select('*, students(first_name, last_name, admission_number, class_id, classes(name)), subjects(name), exams(name)')
+                .eq('school_id', school.id)
+                .range(from, from + pageSize - 1);
+            if (error) throw error;
+            rows.push(...(data || []));
+            if (!data || data.length < pageSize) break;
+        }
+        return rows;
+    };
+
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
@@ -84,7 +101,7 @@ export default function ExamsPage() {
             supabase.from('grade_scales').select('*').eq('school_id', school.id).order('min_marks', { ascending: false }),
             supabase.from('terms').select('*').eq('school_id', school.id).order('term_number'),
             supabase.from('academic_years').select('*').eq('school_id', school.id).order('start_date', { ascending: false }),
-            supabase.from('exam_results').select('*, students(first_name, last_name, admission_number, class_id, classes(name)), subjects(name), exams(name)').eq('school_id', school.id).limit(10000),
+            fetchExamResults(),
             supabase.from('departments').select('*').eq('school_id', school.id).order('name'),
             supabase.from('teachers').select('*').eq('school_id', school.id).order('first_name'),
             supabase.from('teacher_subject_assignments').select('*').eq('school_id', school.id),
@@ -97,7 +114,7 @@ export default function ExamsPage() {
         setGradeScales(gsRes.data || []);
         setTerms(tRes.data || []);
         setAcademicYears(ayRes.data || []);
-        setResults(resRes.data || []);
+        setResults(resRes || []);
         setDepartments(deptRes.data || []);
         setTeachers(teaRes.data || []);
         setTeacherAssignments(assignRes.data || []);
@@ -108,14 +125,22 @@ export default function ExamsPage() {
 
     useEffect(() => {
         if (!selectedExam || !selectedClass || !selectedSubject) return;
+        // Build a set of student IDs that belong to the selected class
+        const classStudentIds = new Set(students.filter(s => s.class_id === selectedClass).map(s => s.id));
         const existingMarks: Record<string, string> = {};
         results
-            .filter(result => result.exam_id === selectedExam && result.class_id === selectedClass && result.subject_id === selectedSubject)
+            // Match by exam + subject + student (NOT class_id — class_id in exam_results may differ
+            // from selectedClass if saved via seed script or a different session)
+            .filter(result =>
+                result.exam_id === selectedExam &&
+                result.subject_id === selectedSubject &&
+                classStudentIds.has(result.student_id)
+            )
             .forEach(result => {
                 existingMarks[result.student_id] = String(result.marks ?? '');
             });
         setMarksData(existingMarks);
-    }, [selectedExam, selectedClass, selectedSubject, results]);
+    }, [selectedExam, selectedClass, selectedSubject, results, students]);
 
     const getGrade = (marks: number) => {
         for (const gs of gradeScales) {
@@ -221,10 +246,14 @@ export default function ExamsPage() {
                 return;
             }
             const gs = getGrade(m);
+            const st = students.find(s => s.id === studentId);
+            // Use the student's actual class_id so FK constraints are always satisfied
+            // Fall back to selectedClass only if student record is somehow missing
+            const effectiveClassId = st?.class_id || selectedClass;
             rows.push({
                 exam_id: selectedExam, student_id: studentId, subject_id: selectedSubject,
-                class_id: selectedClass, marks: m, grade: gs?.grade || null,
-                remarks: getAutoComment(m, students.find(s => s.id === studentId)?.first_name || ''),
+                class_id: effectiveClassId, marks: m, grade: gs?.grade || null,
+                remarks: getAutoComment(m, st?.first_name || ''),
                 school_id: school!.id,
             });
         }
@@ -1228,10 +1257,10 @@ export default function ExamsPage() {
                                     <div className="panel">
                                         <div className="panel-title">Top 100 Students (Level 8 & 13)</div>
                                         <div className="table-wrapper"><table className="data-table"><thead><tr><th>Rank</th><th>Student</th><th>Class</th><th>Total Marks</th><th>Mean Score</th><th>Passes</th><th>Improvement</th><th>Grade</th></tr></thead><tbody>
-                                        {analytics.topStudents.map((s, i) => {
-                                            const gs = getGrade(s.mean);
-                                            return <tr key={s.id}><td><strong className={i < 3 ? 'text-success' : ''}>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(2)}</td><td>{s.passes}/{s.count}</td><td>{s.improvement === null ? 'N/A' : s.improvement.toFixed(1)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td></tr>;
-                                        })}
+                                            {analytics.topStudents.map((s, i) => {
+                                                const gs = getGrade(s.mean);
+                                                return <tr key={s.id}><td><strong className={i < 3 ? 'text-success' : ''}>{i + 1}</strong></td><td><strong>{s.name}</strong></td><td>{s.className}</td><td>{s.total.toFixed(0)}</td><td>{s.mean.toFixed(2)}</td><td>{s.passes}/{s.count}</td><td>{s.improvement === null ? 'N/A' : s.improvement.toFixed(1)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : 'N/A'}</td></tr>;
+                                            })}
                                         </tbody></table></div>
                                     </div>
                                     <div className="analytics-grid">

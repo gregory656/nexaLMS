@@ -340,15 +340,16 @@ async function seedMarks() {
             const rows = rawText.split('\n').filter(r => r.trim() !== '');
             for (const row of rows) {
                 const parts = row.split('|').map(p => p.trim());
-                if (parts.length < 12) continue; // Invalid row
+                if (parts.length < 10) continue; // Invalid row
 
                 let nameIndex = 1;
-                // If the first col is just a number (Grade 8) vs Name (Grade 7)
-                if (parts[1].includes('**') && parseInt(parts[1].replace(/\\*\\*/g, ''))) {
+                // Grade 8 rows have a number in column 1 e.g. **1**; Grade 7 rows have name in col 1
+                const firstCol = parts[1].replace(/\*\*/g, '').trim();
+                if (/^\d+$/.test(firstCol)) {
                     nameIndex = 2; // G8
                 }
 
-                const studentNameFull = parts[nameIndex].replace(/\\*\\*/g, '').trim();
+                const studentNameFull = parts[nameIndex].replace(/\*\*/g, '').trim();
                 const studentNameParts = studentNameFull.split(' ');
                 const firstName = studentNameParts[0];
                 const lastName = studentNameParts.length > 1 ? studentNameParts.slice(1).join(' ') : 'Unknown';
@@ -392,7 +393,7 @@ async function seedMarks() {
 
                 let nameIndex = isGrade8 ? 2 : 1;
 
-                const studentNameFull = parts[nameIndex].replace(/\\*\\*/g, '').trim();
+                const studentNameFull = parts[nameIndex].replace(/\*\*/g, '').trim();
                 const studentNameParts = studentNameFull.split(' ');
                 const firstName = studentNameParts[0];
                 const lastName = studentNameParts.length > 1 ? studentNameParts.slice(1).join(' ') : firstName;
@@ -442,7 +443,7 @@ async function seedMarks() {
                 let nameIndex = isGrade8 ? 2 : 1;
                 let markStartIndex = nameIndex + 1;
 
-                const studentNameFull = parts[nameIndex].replace(/\\*\\*/g, '').trim();
+                const studentNameFull = parts[nameIndex].replace(/\*\*/g, '').trim();
                 const firstName = studentNameFull.split(' ')[0];
 
                 let student = students.find(s => s.first_name.toLowerCase() === firstName.toLowerCase() && s.class_id === classId);
@@ -457,8 +458,8 @@ async function seedMarks() {
                         const markStr = parts[markStartIndex + i];
                         if (!markStr) continue;
 
-                        const markStrClean = markStr.replace(/\\*\\*/g, '').trim();
-                        if (markStrClean === 'NULL' || markStrClean === '—') continue;
+                        const markStrClean = markStr.replace(/\*\*/g, '').replace(/—/g, '').trim();
+                        if (markStrClean === 'NULL' || markStrClean === '' || markStrClean === '-') continue;
 
                         const mark = parseFloat(markStrClean);
                         if (!isNaN(mark)) {
@@ -468,7 +469,7 @@ async function seedMarks() {
                                 exam_id: examId,
                                 student_id: student.id,
                                 subject_id: subjectId,
-                                class_id: classId, // Actually use student.class_id but they might not have it right
+                                class_id: student.class_id || classId,
                                 marks: mark,
                                 grade: gs?.grade || null,
                                 remarks: getAutoComment(mark, student.first_name),

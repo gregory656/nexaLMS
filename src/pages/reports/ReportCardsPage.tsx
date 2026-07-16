@@ -37,6 +37,23 @@ export default function ReportCardsPage() {
     const [includeFeeBalance, setIncludeFeeBalance] = useState(false);
     const [downloading, setDownloading] = useState(false);
 
+    const fetchExamResults = async () => {
+        if (!school?.id) return [];
+        const rows: any[] = [];
+        const pageSize = 1000;
+        for (let from = 0; ; from += pageSize) {
+            const { data, error } = await supabase
+                .from('exam_results')
+                .select('*, subjects(name)')
+                .eq('school_id', school.id)
+                .range(from, from + pageSize - 1);
+            if (error) throw error;
+            rows.push(...(data || []));
+            if (!data || data.length < pageSize) break;
+        }
+        return rows;
+    };
+
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
@@ -44,7 +61,7 @@ export default function ReportCardsPage() {
             supabase.from('exams').select('*, terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
             supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
             supabase.from('students').select('*').eq('school_id', school.id).eq('status', 'active').order('first_name'),
-            supabase.from('exam_results').select('*, subjects(name)').eq('school_id', school.id).range(0, 9999),
+            fetchExamResults(),
             supabase.from('subjects').select('*').eq('school_id', school.id).order('name'),
             supabase.from('grade_scales').select('*').eq('school_id', school.id).order('min_marks', { ascending: false }),
             supabase.from('report_cards').select('*, students(first_name, last_name, admission_number), classes(name), terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
@@ -53,7 +70,7 @@ export default function ReportCardsPage() {
         setExams(exRes.data || []);
         setClasses(clRes.data || []);
         setStudents(stuRes.data || []);
-        setResults(resRes.data || []);
+        setResults(resRes || []);
         setSubjects(subRes.data || []);
         setGradeScales(gsRes.data || []);
         setReportCards(rcRes.data || []);
