@@ -28,10 +28,31 @@ const isPreSubject = (subject) => {
   return value.includes('pre') || value.includes('technical') || value.includes('pret');
 };
 
-const must = async (label, query) => {
-  const { data, error } = await query;
-  if (error) throw new Error(`${label}: ${error.message}`);
-  return data || [];
+const cbcScales = [
+  ['EE1', 90, 100, 8, 'Exceeding expectations'],
+  ['EE2', 75, 89, 7, 'Exceeding expectations'],
+  ['ME1', 58, 74, 6, 'Meeting expectations'],
+  ['ME2', 42, 57, 5, 'Meeting expectations'],
+  ['AE2', 31, 40, 4, 'Approaching expectations'],
+  ['AE1', 21, 30, 3, 'Approaching expectations'],
+  ['BE2', 11, 20, 2, 'Below expectations'],
+  ['BE1', 1, 10, 1, 'Below expectations'],
+];
+
+const cbcGradeNames = new Set(cbcScales.map(([grade]) => grade));
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const must = async (label, queryFactory) => {
+  let lastError;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const { data, error } = await (typeof queryFactory === 'function' ? queryFactory() : queryFactory);
+    if (!error) return data || [];
+    lastError = error;
+    if (!/fetch failed|timeout|network/i.test(error.message || String(error))) break;
+    await sleep(1000 * attempt);
+  }
+  throw new Error(`${label}: ${lastError?.message || lastError}`);
 };
 
 const fetchAll = async (label, makeQuery, pageSize = 1000) => {
@@ -64,19 +85,22 @@ async function main() {
 
   let schoolId = authData.user.user_metadata?.school_id;
   if (!schoolId) {
-    const users = await must('user school lookup', supabase.from('users').select('school_id').eq('id', authData.user.id).limit(1));
+    const users = await must('user school lookup', () => supabase.from('users').select('school_id').eq('id', authData.user.id).limit(1));
     schoolId = users[0]?.school_id;
   }
   if (!schoolId) throw new Error('Could not resolve school id');
 
   const [classes, subjects, exams, students, results, gradeScales] = await Promise.all([
-    must('classes', supabase.from('classes').select('id,name').eq('school_id', schoolId)),
-    must('subjects', supabase.from('subjects').select('id,name,code').eq('school_id', schoolId)),
-    must('exams', supabase.from('exams').select('id,name').eq('school_id', schoolId)),
-    must('students', supabase.from('students').select('id,first_name,last_name,class_id,status').eq('school_id', schoolId).eq('status', 'active')),
+    must('classes', () => supabase.from('classes').select('id,name').eq('school_id', schoolId)),
+    must('subjects', () => supabase.from('subjects').select('id,name,code').eq('school_id', schoolId)),
+    must('exams', () => supabase.from('exams').select('id,name').eq('school_id', schoolId)),
+    must('students', () => supabase.from('students').select('id,first_name,last_name,class_id,status').eq('school_id', schoolId).eq('status', 'active')),
     fetchAll('exam_results', () => supabase.from('exam_results').select('id,exam_id,student_id,subject_id,class_id,marks,grade,remarks').eq('school_id', schoolId)),
-    must('grade scales', supabase.from('grade_scales').select('*').eq('school_id', schoolId).order('min_marks', { ascending: false })),
+    must('grade scales', () => supabase.from('grade_scales').select('*').eq('school_id', schoolId).order('min_marks', { ascending: false })),
   ]);
+
+  const legacyScales = gradeScales.filter((scale) => !cbcGradeNames.has(scale.grade));
+  const existingCbc = new Map(gradeScales.filter((scale) => cbcGradeNames.has(scale.grade)).map((scale) => [scale.grade, scale]));
 
   const targetClasses = classes.filter((item) => isGradeTarget(item.name));
   const preSubjects = subjects.filter(isPreSubject);
@@ -134,10 +158,13 @@ async function main() {
       }
 
       for (const result of examClassResults) {
-        if (result.marks == null || result.grade) continue;
+        if (result.marks == null) continue;
         const student = students.find((item) => item.id === result.student_id);
-        const scale = gradeFromScale(gradeScales, result.marks);
+        const scale = cbcScales
+          .map(([grade, min_marks, max_marks, points, remarks]) => ({ grade, min_marks, max_marks, points, remarks }))
+          .find((item) => Number(result.marks) >= Number(item.min_marks) && Number(result.marks) <= Number(item.max_marks));
         if (!scale) continue;
+        if (result.grade === scale.grade && result.remarks) continue;
         updates.push({
           id: result.id,
           grade: scale.grade,
@@ -148,13 +175,40 @@ async function main() {
   }
 
   console.table(coverageRows);
+  console.log(`Legacy grade-scale rows to remove: ${legacyScales.map((item) => item.grade).join(', ') || 'none'}`);
+  console.log(`CBC grade-scale rows to upsert: ${cbcScales.length}`);
   console.log(`Grade/remark rows to repair: ${updates.length}`);
   console.log(`PRE rows to copy from duplicate PRE subjects: ${copies.length}`);
 
   if (!APPLY) return;
 
+  for (const legacy of legacyScales) {
+    await must('delete legacy grade scale', () => supabase
+      .from('grade_scales')
+      .delete()
+      .eq('id', legacy.id)
+      .select('id'));
+  }
+
+  for (const [grade, min_marks, max_marks, points, remarks] of cbcScales) {
+    const existing = existingCbc.get(grade);
+    const payload = { school_id: schoolId, grade, min_marks, max_marks, points, remarks };
+    if (existing) {
+      await must('update CBC grade scale', () => supabase
+        .from('grade_scales')
+        .update(payload)
+        .eq('id', existing.id)
+        .select('id'));
+    } else {
+      await must('insert CBC grade scale', () => supabase
+        .from('grade_scales')
+        .insert(payload)
+        .select('id'));
+    }
+  }
+
   for (const update of updates) {
-    await must('update result grade', supabase
+    await must('update result grade', () => supabase
       .from('exam_results')
       .update({ grade: update.grade, remarks: update.remarks })
       .eq('id', update.id)
@@ -162,7 +216,7 @@ async function main() {
   }
 
   for (let index = 0; index < copies.length; index += 100) {
-    await must('copy PRE rows', supabase
+    await must('copy PRE rows', () => supabase
       .from('exam_results')
       .upsert(copies.slice(index, index + 100), { onConflict: 'exam_id,student_id,subject_id' })
       .select('id'));

@@ -121,7 +121,14 @@ export default function ExamsPage() {
         for (const gs of gradeScales) {
             if (marks >= gs.min_marks && marks <= gs.max_marks) return gs;
         }
-        return null;
+        if (marks >= 90) return { grade: 'EE1', points: 8, remarks: 'Exceeding expectations' };
+        if (marks >= 75) return { grade: 'EE2', points: 7, remarks: 'Exceeding expectations' };
+        if (marks >= 58) return { grade: 'ME1', points: 6, remarks: 'Meeting expectations' };
+        if (marks >= 42) return { grade: 'ME2', points: 5, remarks: 'Meeting expectations' };
+        if (marks >= 31) return { grade: 'AE2', points: 4, remarks: 'Approaching expectations' };
+        if (marks >= 21) return { grade: 'AE1', points: 3, remarks: 'Approaching expectations' };
+        if (marks >= 11) return { grade: 'BE2', points: 2, remarks: 'Below expectations' };
+        return { grade: 'BE1', points: 1, remarks: 'Below expectations' };
     };
 
     const getAutoComment = (marks: number, studentName: string) => {
@@ -200,22 +207,42 @@ export default function ExamsPage() {
             toast.error('Select exam, class, and subject first'); return;
         }
         setSaving(true);
-        const entries = Object.entries(marksData).filter(([_, v]) => v !== '');
+        const entries = Object.entries(marksData)
+            .map(([studentId, value]) => [studentId, value.trim()] as const)
+            .filter(([_, value]) => value !== '');
         if (entries.length === 0) { toast.error('No marks to save'); setSaving(false); return; }
 
-        const rows = entries.map(([studentId, marks]) => {
+        const rows = [];
+        for (const [studentId, marks] of entries) {
             const m = parseFloat(marks);
+            if (!Number.isFinite(m) || m < 0 || m > 100) {
+                toast.error('Marks must be numbers from 0 to 100');
+                setSaving(false);
+                return;
+            }
             const gs = getGrade(m);
-            return {
+            rows.push({
                 exam_id: selectedExam, student_id: studentId, subject_id: selectedSubject,
                 class_id: selectedClass, marks: m, grade: gs?.grade || null,
                 remarks: getAutoComment(m, students.find(s => s.id === studentId)?.first_name || ''),
                 school_id: school!.id,
-            };
-        });
+            });
+        }
 
-        const { error } = await supabase.from('exam_results').upsert(rows, { onConflict: 'exam_id,student_id,subject_id' });
-        if (error) toast.error(error.message); else { toast.success(`Saved ${rows.length} marks`); await fetchAll(); }
+        let saved = 0;
+        for (let index = 0; index < rows.length; index += 100) {
+            const { error } = await supabase
+                .from('exam_results')
+                .upsert(rows.slice(index, index + 100), { onConflict: 'exam_id,student_id,subject_id' });
+            if (error) {
+                toast.error(error.message);
+                setSaving(false);
+                return;
+            }
+            saved += rows.slice(index, index + 100).length;
+        }
+        toast.success(`Saved ${saved} marks`);
+        await fetchAll();
         setSaving(false);
     };
 

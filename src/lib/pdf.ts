@@ -1236,26 +1236,33 @@ export async function generateReportCardPdf(options: {
 // Merge multiple single-page PDFs
 export function mergePdfPages(docs: jsPDF[]): jsPDF | null {
     if (docs.length === 0) return null;
-    const merged = docs[0];
-    const internal = merged.internal as any;
-    for (const source of docs.slice(1)) {
+    const merged = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const mergedInternal = merged.internal as any;
+    let hasPage = false;
+
+    for (const source of docs) {
         const sourceInternal = source.internal as any;
         if (sourceInternal.collections) {
-            internal.collections = internal.collections || {};
+            mergedInternal.collections = mergedInternal.collections || {};
             Object.entries(sourceInternal.collections).forEach(([key, value]) => {
-                if (!internal.collections[key]) internal.collections[key] = value;
+                if (!mergedInternal.collections[key]) mergedInternal.collections[key] = value;
                 else if (typeof value === 'object' && value) {
-                    internal.collections[key] = { ...internal.collections[key], ...(value as Record<string, unknown>) };
+                    mergedInternal.collections[key] = { ...mergedInternal.collections[key], ...(value as Record<string, unknown>) };
                 }
             });
         }
-        const pages = sourceInternal.pages || [];
-        pages.slice(1).forEach((page: any) => {
-            internal.pages.push(Array.isArray(page) ? [...page] : page);
-        });
+        const pageCount = source.getNumberOfPages();
+        for (let page = 1; page <= pageCount; page++) {
+            if (hasPage) merged.addPage();
+            merged.setPage(merged.getNumberOfPages());
+            const currentPage = merged.getCurrentPageInfo().pageNumber;
+            const sourcePage = sourceInternal.pages?.[page];
+            mergedInternal.pages[currentPage] = Array.isArray(sourcePage) ? [...sourcePage] : sourcePage;
+            hasPage = true;
+        }
     }
 
-    const totalPages = internal.getNumberOfPages();
+    const totalPages = merged.getNumberOfPages();
     for (let page = 1; page <= totalPages; page++) {
         merged.setPage(page);
         merged.setFont('helvetica', 'normal');
