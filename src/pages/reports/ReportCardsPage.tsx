@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
-import { generateReportCardPdf, downloadPdf } from '../../lib/pdf';
+import { generateReportCardPdf, downloadPdf, mergePdfPages } from '../../lib/pdf';
 import {
     FileText, ClipboardList, Download, Eye, ToggleLeft, ToggleRight,
     GraduationCap, Activity, Target, MessageSquare
@@ -25,6 +25,7 @@ export default function ReportCardsPage() {
     const [classes, setClasses] = useState<any[]>([]);
     const [students, setStudents] = useState<any[]>([]);
     const [results, setResults] = useState<any[]>([]);
+    const [subjects, setSubjects] = useState<any[]>([]);
     const [gradeScales, setGradeScales] = useState<any[]>([]);
     const [reportCards, setReportCards] = useState<any[]>([]);
 
@@ -38,11 +39,12 @@ export default function ReportCardsPage() {
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const [exRes, clRes, stuRes, resRes, gsRes, rcRes] = await Promise.all([
+        const [exRes, clRes, stuRes, resRes, subRes, gsRes, rcRes] = await Promise.all([
             supabase.from('exams').select('*, terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
             supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
             supabase.from('students').select('*').eq('school_id', school.id).eq('status', 'active').order('first_name'),
             supabase.from('exam_results').select('*, subjects(name)').eq('school_id', school.id),
+            supabase.from('subjects').select('*').eq('school_id', school.id).order('name'),
             supabase.from('grade_scales').select('*').eq('school_id', school.id).order('min_marks', { ascending: false }),
             supabase.from('report_cards').select('*, students(first_name, last_name, admission_number), classes(name), terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
         ]);
@@ -50,6 +52,7 @@ export default function ReportCardsPage() {
         setClasses(clRes.data || []);
         setStudents(stuRes.data || []);
         setResults(resRes.data || []);
+        setSubjects(subRes.data || []);
         setGradeScales(gsRes.data || []);
         setReportCards(rcRes.data || []);
         setLoading(false);
@@ -74,11 +77,37 @@ export default function ReportCardsPage() {
 
     const getStudentReport = (studentId: string) => {
         const studentRes = examResults.filter(r => r.student_id === studentId);
-        const total = studentRes.reduce((s, r) => s + Number(r.marks || 0), 0);
-        const mean = studentRes.length ? total / studentRes.length : 0;
+        const subjectRows = subjects.map(subject => {
+            const result = studentRes.find(r => r.subject_id === subject.id);
+            return result || {
+                id: `${studentId}-${subject.id}`,
+                student_id: studentId,
+                subject_id: subject.id,
+                class_id: selectedClass,
+                exam_id: selectedExam,
+                marks: 0,
+                grade: null,
+                remarks: 'No mark recorded',
+                subjects: { name: subject.name },
+            };
+        });
+        const total = subjectRows.reduce((s, r) => s + Number(r.marks || 0), 0);
+        const mean = subjectRows.length ? total / subjectRows.length : 0;
         const gs = getGrade(mean);
-        return { subjects: studentRes, total, mean, grade: gs?.grade || '—', remarks: gs?.remarks || '' };
+        return { subjects: subjectRows, total, mean, grade: gs?.grade || '-', remarks: gs?.remarks || '' };
     };
+
+    const addSubjectRanks = (subjectRows: any[]) => subjectRows.map(row => {
+        const mark = row.marks === null || row.marks === undefined || row.marks === '' ? 0 : Number(row.marks);
+        if (Number.isNaN(mark)) return { ...row, subjectRank: null, subjectTotal: classStudents.length };
+        const subjectMarks = classStudents
+            .map(s => examResults.find(r => r.student_id === s.id && r.subject_id === row.subject_id))
+            .filter(Boolean)
+            .map((r: any) => Number(r.marks))
+            .filter(m => !Number.isNaN(m))
+            .sort((a, b) => b - a);
+        return { ...row, subjectRank: subjectMarks.findIndex(m => m === mark) + 1, subjectTotal: subjectMarks.length };
+    });
 
     const getStudentAnalytics = (studentId: string) => {
         const studentRes = examResults.filter(r => r.student_id === studentId);
@@ -195,7 +224,7 @@ export default function ReportCardsPage() {
                 student,
                 exam: exams.find(e => e.id === selectedExam),
                 className: classes.find(c => c.id === selectedClass)?.name || '',
-                subjects: report.subjects,
+                subjects: addSubjectRanks(report.subjects),
                 total: report.total,
                 mean: report.mean,
                 grade: report.grade,
@@ -225,7 +254,7 @@ export default function ReportCardsPage() {
             return;
         }
         setDownloading(true);
-        let count = 0;
+        const docs = [];
         for (const student of rankedStudents) {
             try {
                 const report = getStudentReport(student.id);
@@ -236,7 +265,7 @@ export default function ReportCardsPage() {
                     student,
                     exam: exams.find(e => e.id === selectedExam),
                     className: classes.find(c => c.id === selectedClass)?.name || '',
-                    subjects: report.subjects,
+                    subjects: addSubjectRanks(report.subjects),
                     total: report.total,
                     mean: report.mean,
                     grade: report.grade,
@@ -250,13 +279,17 @@ export default function ReportCardsPage() {
                     totalStudents: rankedStudents.length,
                     analytics,
                 });
-                downloadPdf(doc, `report_${student.first_name}_${student.last_name}_${count + 1}`);
-                count++;
-                // Small delay to prevent browser blocking multiple downloads
-                await new Promise(r => setTimeout(r, 300));
+                docs.push(doc);
             } catch { /* skip failed */ }
         }
-        toast.success(`Downloaded ${count} individual report cards`);
+        const merged = mergePdfPages(docs);
+        if (merged) {
+            const className = classes.find(c => c.id === selectedClass)?.name || 'class';
+            downloadPdf(merged, `report_cards_${className.replace(/\s+/g, '_')}_${docs.length}_pages`);
+            toast.success(`Downloaded one PDF with ${docs.length} report cards`);
+        } else {
+            toast.error('No report cards generated');
+        }
         setDownloading(false);
     };
 
@@ -436,7 +469,7 @@ export default function ReportCardsPage() {
                                     <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-400)' }}>No results found for this student.</td></tr>
                                 ) : previewStudent.report.subjects.map((r: any, i: number) => {
                                     const gs = getGrade(Number(r.marks));
-                                    return <tr key={i}><td>{r.subjects?.name || '—'}</td><td><strong>{r.marks}</strong></td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : '—'}</td><td className="text-sm text-muted">{r.remarks || '—'}</td></tr>;
+                                    return <tr key={i}><td>{r.subjects?.name || '-'}</td><td><strong>{r.marks ?? 0}</strong></td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : '-'}</td><td className="text-sm text-muted">{r.remarks || '-'}</td></tr>;
                                 })}
                             </tbody>
                         </table>
@@ -575,7 +608,7 @@ export default function ReportCardsPage() {
                                 onClick={handleBulkIndividual}
                                 disabled={downloading || rankedStudents.length === 0}
                             >
-                                {downloading ? <span className="spinner" /> : <><Download size={16} /> Download Individual PDFs ({rankedStudents.length} files)</>}
+                                {downloading ? <span className="spinner" /> : <><Download size={16} /> Download One PDF ({rankedStudents.length} pages)</>}
                             </button>
                         </div>
                     </div>

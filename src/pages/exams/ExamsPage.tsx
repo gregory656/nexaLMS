@@ -8,7 +8,7 @@ import {
     Plus, X, Trash2, Shuffle, BookOpen, CheckCircle, Database, Sparkles
 } from 'lucide-react';
 import HelpIcon from '../../components/ui/HelpIcon';
-import { addTableToPdf, createPdfWithHeader, downloadPdf } from '../../lib/pdf';
+import { createPdfWithHeader, downloadPdf } from '../../lib/pdf';
 
 const TABS = [
     { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -1291,79 +1291,116 @@ export default function ExamsPage() {
             } else {
                 const examName = exams.find(ex => ex.id === dlExam)?.name || 'Exam';
                 const doc = await createPdfWithHeader({
-                    title: 'Super Analytics Decision Report',
-                    subtitle: `${examName} | Mean ${analytics.overallMean.toFixed(1)} | Completion ${analytics.completion}%`,
+                    title: 'Student Ranking Analytics',
+                    subtitle: `${examName} | Landscape ranking sheet | ${dlScope.toUpperCase()}`,
                     schoolName: school?.name || 'School',
                     schoolMotto: school?.motto,
                     logoUrl: school?.logo_url,
                     watermarkUrl: school?.watermark_url,
                     orientation: 'landscape',
                 });
-                const nextY = () => ((doc as any).lastAutoTable?.finalY || (doc as any).__contentStartY || 40) + 8;
-                const fallbackRows = (rows: any[][], cols: number) => rows.length ? rows : [Array.from({ length: cols }, (_, i) => i === 0 ? 'N/A' : '')];
-                addTableToPdf(doc, ['Metric', 'Value'], [
-                    ['School Mean', analytics.overallMean.toFixed(1)],
-                    ['School Mean Grade', getGrade(analytics.overallMean)?.grade || 'N/A'],
-                    ['Pass Rate', `${analytics.passRate.toFixed(1)}%`],
-                    ['Fail Rate', `${analytics.failRate.toFixed(1)}%`],
-                    ['Distinction Rate', `${analytics.distinctionRate.toFixed(1)}%`],
-                    ['Marks Entered', String(analytics.examResults.length)],
-                    ['Expected Rows', String(analytics.expectedRows)],
-                    ['Completion', `${analytics.completion}%`],
-                    ['Top Student', analytics.ranked[0]?.name || 'N/A'],
-                    ['Bottom Student', analytics.bottomStudents[0]?.name || 'N/A'],
-                    ['Best Subject Overall', analytics.bestSubject],
-                    ['Most Difficult Subject', analytics.mostDifficultSubject],
-                    ['Best Class', analytics.bestClass],
-                    ['Lowest Class', analytics.lowestClass],
-                    ['Best Department', analytics.bestDepartment],
-                    ['Lowest Department', analytics.lowestDepartment],
-                    ['Previous Exam Comparison', analytics.previousExamName],
+                const subjectShort = (name: string) => {
+                    const value = String(name || '').toUpperCase();
+                    if (value.includes('ENGLISH')) return 'ENG';
+                    if (value.includes('KIS')) return 'KISW';
+                    if (value.includes('MATH')) return 'MATH';
+                    if (value.includes('INT')) return 'INT/S';
+                    if (value.includes('CRE')) return 'CRE';
+                    if (value.includes('PRE')) return 'PRE';
+                    if (value.includes('CAS') || value.includes('CREATIVE')) return 'CAS';
+                    if (value.includes('AGR')) return 'AGR';
+                    if (value.includes('SOCIAL') || value.includes('SST')) return 'SST';
+                    return value.slice(0, 5) || 'SBJ';
+                };
+                const levelFor = (mean: number) => {
+                    if (mean >= 90) return { grade: 'EE1', points: 8 };
+                    if (mean >= 75) return { grade: 'EE2', points: 7 };
+                    if (mean >= 58) return { grade: 'ME1', points: 6 };
+                    if (mean >= 42) return { grade: 'ME2', points: 5 };
+                    if (mean >= 31) return { grade: 'AE2', points: 4 };
+                    if (mean >= 21) return { grade: 'AE1', points: 3 };
+                    if (mean >= 11) return { grade: 'BE2', points: 2 };
+                    return { grade: 'BE1', points: 1 };
+                };
+                const marksDisplay = (value: any) => {
+                    if (value === null || value === undefined || value === '') return 'X';
+                    const mark = Number(value);
+                    return Number.isNaN(mark) ? String(value).toUpperCase() : mark.toFixed(0);
+                };
+                const selectedClassIds = dlScope === 'class' && dlClass ? new Set([dlClass]) : new Set(classes.map(c => c.id));
+                const studentIds = new Set(filtered.map(r => r.student_id));
+                const scopedStudents = students
+                    .filter(s => studentIds.has(s.id) && selectedClassIds.has(s.class_id))
+                    .map(student => {
+                        const studentResults = analytics.examResults.filter(r => r.student_id === student.id);
+                        const subjectValues = subjects.map(subject => studentResults.find(r => r.subject_id === subject.id));
+                        const numericMarks = subjectValues.map(r => Number(r?.marks)).filter(mark => !Number.isNaN(mark));
+                        const total = numericMarks.reduce((sum, mark) => sum + mark, 0);
+                        const mean = subjects.length ? total / subjects.length : 0;
+                        const min = numericMarks.length ? Math.min(...numericMarks) : 0;
+                        const level = levelFor(mean);
+                        const className = classes.find(c => c.id === student.class_id)?.name || '';
+                        const streamName = className.split(' ').slice(2).join(' ') || 'N/A';
+                        const breakdown = `${numericMarks.filter(mark => mark >= 75).length} high, ${numericMarks.filter(mark => mark < 42).length} support`;
+                        return { student, subjectValues, total, mean, min, level, className, streamName, breakdown };
+                    })
+                    .sort((a, b) => b.total - a.total);
+                const overallRank = new Map(scopedStudents.map((item, index) => [item.student.id, index + 1]));
+                const streamRank = new Map<string, number>();
+                Object.values(scopedStudents.reduce((acc, item) => {
+                    const key = item.className || item.streamName;
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(item);
+                    return acc;
+                }, {} as Record<string, typeof scopedStudents>)).forEach(group => {
+                    group.sort((a, b) => b.total - a.total).forEach((item, index) => streamRank.set(item.student.id, index + 1));
+                });
+                const headers = [
+                    'Adm', 'Name', 'Stream',
+                    ...subjects.map(s => subjectShort(s.name)),
+                    'SBJ', 'TT', 'AVG', 'PL', 'PTS', 'MIN', 'Str Pos', 'Ov Pos', 'Breakdown'
+                ];
+                const body = scopedStudents.map(item => [
+                    item.student.admission_number || '-',
+                    `${item.student.first_name || ''} ${item.student.last_name || ''}`.trim(),
+                    item.streamName,
+                    ...item.subjectValues.map(r => marksDisplay(r?.marks)),
+                    String(item.subjectValues.filter(r => r?.marks !== null && r?.marks !== undefined && r?.marks !== '').length),
+                    item.total.toFixed(0),
+                    item.mean.toFixed(1),
+                    item.level.grade,
+                    String(item.level.points),
+                    item.min ? item.min.toFixed(0) : 'X',
+                    String(streamRank.get(item.student.id) || '-'),
+                    String(overallRank.get(item.student.id) || '-'),
+                    item.breakdown,
                 ]);
-                addTableToPdf(doc, ['Joint School Metric', 'Value'], analytics.jointAnalysis, nextY());
-                addTableToPdf(doc, ['Grade', 'Count', 'Percentage'], Object.entries(analytics.gradeCounts).map(([grade, count]) => [grade, String(count), `${((count / Math.max(analytics.examResults.length, 1)) * 100).toFixed(1)}%`]), nextY());
-                addTableToPdf(doc, ['Subject', 'Mean', 'Median', 'Mode', 'Std Dev', 'Range', 'Highest', 'Lowest', 'Pass Rate', 'Teacher'], fallbackRows(analytics.subjectsRanked.map(s => [s.name, s.mean.toFixed(1), s.median.toFixed(1), s.mode, s.standardDeviation.toFixed(1), s.range.toFixed(1), String(s.highest), s.lowest === 101 ? 'N/A' : String(s.lowest), `${s.count ? ((s.passes / s.count) * 100).toFixed(1) : 0}%`, s.teachers]), 10), nextY());
-                addTableToPdf(doc, ['Department', 'Mean', 'Entries', 'Pass Rate'], fallbackRows(analytics.departmentsRanked.map(d => [d.name, d.mean.toFixed(1), String(d.count), `${d.count ? ((d.passes / d.count) * 100).toFixed(1) : 0}%`]), 4), nextY());
-                addTableToPdf(doc, ['Teacher', 'Candidates', 'Mean', 'Pass Rate', 'Distinction Rate', 'Improvement', 'Recognition'], fallbackRows(analytics.teachersRanked.map(t => [t.name, String(t.count), t.mean.toFixed(1), `${t.count ? ((t.passes / t.count) * 100).toFixed(1) : 0}%`, `${t.count ? ((t.distinctions / t.count) * 100).toFixed(1) : 0}%`, t.improvement === null ? 'N/A' : t.improvement.toFixed(1), analytics.teachersRanked[0]?.id === t.id ? 'Best Teacher' : analytics.mostImprovedTeachers[0]?.id === t.id ? 'Most Improved' : 'N/A']), 7), nextY());
-                addTableToPdf(doc, ['Class', 'Mean', 'Candidates', 'Pass Rate', 'Improvement'], fallbackRows(analytics.classesRanked.map(c => [c.name, c.mean.toFixed(1), String(c.studentCount), `${c.count ? ((c.passes / c.count) * 100).toFixed(1) : 0}%`, c.improvement === null ? 'N/A' : c.improvement.toFixed(1)]), 5), nextY());
-                addTableToPdf(doc, ['Stream', 'Mean', 'Entries', 'Pass Rate'], fallbackRows(analytics.streamsRanked.map(s => [s.name, s.mean.toFixed(1), String(s.count), `${s.count ? ((s.passes / s.count) * 100).toFixed(1) : 0}%`]), 4), nextY());
-                addTableToPdf(doc, ['Gender Metric', 'Value'], [
-                    ['Boys Mean', analytics.genderResults.boysCount ? analytics.genderResults.boysMean.toFixed(1) : 'N/A'],
-                    ['Girls Mean', analytics.genderResults.girlsCount ? analytics.genderResults.girlsMean.toFixed(1) : 'N/A'],
-                    ['Best Boy', analytics.genderResults.bestBoy],
-                    ['Best Girl', analytics.genderResults.bestGirl],
-                    ['Top 10 Boys', analytics.genderResults.topBoys.length ? analytics.genderResults.topBoys.map(s => s.name).join(', ') : 'N/A'],
-                    ['Top 10 Girls', analytics.genderResults.topGirls.length ? analytics.genderResults.topGirls.map(s => s.name).join(', ') : 'N/A'],
-                ], nextY());
-                addTableToPdf(doc, ['Rank', 'Student', 'Class', 'Total', 'Mean', 'Grade', 'Improvement'], fallbackRows(analytics.topStudents.map((s, i) => [String(i + 1), s.name, s.className, s.total.toFixed(0), s.mean.toFixed(1), getGrade(s.mean)?.grade || 'N/A', s.improvement === null ? 'N/A' : s.improvement.toFixed(1)]), 7), nextY());
-                addTableToPdf(doc, ['Rank', 'Student', 'Class', 'Total', 'Mean', 'Grade'], fallbackRows(analytics.bottomStudents.map((s, i) => [String(i + 1), s.name, s.className, s.total.toFixed(0), s.mean.toFixed(1), getGrade(s.mean)?.grade || 'N/A']), 6), nextY());
-                addTableToPdf(doc, ['Improvement Metric', 'Value'], [
-                    ['Most Improved Student', analytics.mostImprovedStudents[0]?.name || 'N/A'],
-                    ['Most Improved Class', analytics.mostImprovedClasses[0]?.name || 'N/A'],
-                    ['Most Improved Subject', analytics.mostImprovedSubjects[0]?.name || 'N/A'],
-                    ['Most Improved Teacher', analytics.mostImprovedTeachers[0]?.name || 'N/A'],
-                    ['Most Improved Stream', 'N/A'],
-                    ['Most Improved Department', 'N/A'],
-                    ['Most Improved School (Joint)', 'N/A'],
-                    ['Biggest Decline Student', analytics.biggestDeclineStudents[0]?.name || 'N/A'],
-                    ['Biggest Decline Class', analytics.mostImprovedClasses.slice().sort((a, b) => (a.improvement || 0) - (b.improvement || 0))[0]?.name || 'N/A'],
-                ], nextY());
-                addTableToPdf(doc, ['Target Metric', 'Value'], analytics.targetAnalysis, nextY());
-                addTableToPdf(doc, ['Attendance Metric', 'Value'], analytics.attendanceAnalysis, nextY());
-                addTableToPdf(doc, ['Special List', 'Value'], [
-                    ['Top 10', analytics.topStudents.slice(0, 10).map(s => s.name).join(', ') || 'N/A'],
-                    ['Top 50 Count', String(analytics.topStudents.slice(0, 50).length || 'N/A')],
-                    ['Top 100 Count', String(analytics.topStudents.length || 'N/A')],
-                    ['Bottom 10', analytics.bottomStudents.slice(0, 10).map(s => s.name).join(', ') || 'N/A'],
-                    ['Straight A Students', analytics.straightAStudents.map(s => s.name).join(', ') || 'N/A'],
-                    ['All Passes', analytics.allPassStudents.map(s => s.name).join(', ') || 'N/A'],
-                    ['Failing Multiple Subjects', analytics.failingMultipleSubjects.map(s => s.name).join(', ') || 'N/A'],
-                    ['Perfect Attendance + High Performance', 'N/A'],
-                    ['At-Risk Students', analytics.atRiskStudents.map(s => s.name).join(', ') || 'N/A'],
-                ], nextY());
-                addTableToPdf(doc, ['Student', 'Adm No.', 'Class', 'Subject', 'Marks', 'Grade'], rows.slice(0, 120), nextY());
-                downloadPdf(doc, `super_analytics_${dlScope}_${Date.now()}`);
-                toast.success('Super analytics PDF downloaded');
+                (doc as any).autoTable({
+                    startY: (doc as any).__contentStartY || 38,
+                    head: [headers],
+                    body,
+                    theme: 'grid',
+                    styles: { fontSize: 5.7, cellPadding: 1, overflow: 'linebreak', valign: 'middle' },
+                    headStyles: { fillColor: [18, 94, 82], textColor: 255, fontStyle: 'bold', halign: 'center' },
+                    alternateRowStyles: { fillColor: [246, 250, 249] },
+                    columnStyles: {
+                        0: { cellWidth: 13 },
+                        1: { cellWidth: 34 },
+                        2: { cellWidth: 16 },
+                        19: { cellWidth: 12 },
+                        20: { cellWidth: 28 },
+                    },
+                    margin: { left: 8, right: 8 },
+                    didDrawPage: () => {
+                        const page = doc.getCurrentPageInfo().pageNumber;
+                        const pages = (doc as any).internal.getNumberOfPages();
+                        doc.setFontSize(7);
+                        doc.setTextColor(90, 102, 118);
+                        doc.text(`Page ${page} of ${pages}`, doc.internal.pageSize.getWidth() / 2, doc.internal.pageSize.getHeight() - 6, { align: 'center' });
+                    },
+                });
+                downloadPdf(doc, `student_ranking_analytics_${dlScope}_${Date.now()}`);
+                toast.success(`Landscape analytics PDF downloaded (${body.length} students)`);
             }
         } catch (err: any) {
             toast.error('Download failed: ' + err.message);
