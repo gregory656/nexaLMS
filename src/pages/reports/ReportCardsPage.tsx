@@ -63,6 +63,19 @@ export default function ReportCardsPage() {
 
     useEffect(() => { fetchAll(); }, [school?.id]);
 
+    useEffect(() => {
+        if (!school?.id) return;
+        const refreshWhenVisible = () => {
+            if (document.visibilityState === 'visible') fetchAll();
+        };
+        window.addEventListener('focus', fetchAll);
+        document.addEventListener('visibilitychange', refreshWhenVisible);
+        return () => {
+            window.removeEventListener('focus', fetchAll);
+            document.removeEventListener('visibilitychange', refreshWhenVisible);
+        };
+    }, [school?.id]);
+
     const classStudents = students.filter(s => s.class_id === selectedClass);
     const examResults = results.filter(r => r.exam_id === selectedExam);
 
