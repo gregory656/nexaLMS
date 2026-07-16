@@ -7,7 +7,7 @@ import {
     BookOpen, Calendar, ClipboardList, DollarSign,
     Settings, Shield, CreditCard,
     School, FileText, Clock, Megaphone,
-    UserCog, BarChart3, LogOut, Home, HelpCircle, Globe2
+    UserCog, BarChart3, LogOut, Home, HelpCircle, Globe2, Zap
 } from 'lucide-react';
 import HelpSidebar from './HelpSidebar';
 
@@ -45,6 +45,7 @@ const navSections = [
         items: [
             { to: '/exams', icon: ClipboardList, label: 'Examinations' },
             { to: '/reports', icon: FileText, label: 'Report Cards' },
+            { to: '/super-analytics', icon: Zap, label: 'Super Analytics', highlight: true },
             { to: '/attendance', icon: UserCog, label: 'Attendance' },
         ]
     },
@@ -139,6 +140,27 @@ export default function Sidebar() {
                                         <item.icon />
                                         <span>{item.label}</span>
                                     </button>
+                                ) : (item as any).highlight ? (
+                                    <NavLink
+                                        key={item.to}
+                                        to={item.to}
+                                        className={({ isActive }) =>
+                                            `sidebar-item ${isActive ? 'active' : ''}`
+                                        }
+                                        style={({ isActive }) => ({
+                                            background: isActive
+                                                ? 'linear-gradient(90deg, #d97706, #92400e)'
+                                                : 'linear-gradient(90deg, rgba(245,158,11,0.18), rgba(217,119,6,0.10))',
+                                            border: '1.5px solid rgba(245,158,11,0.4)',
+                                            borderRadius: 8,
+                                            color: isActive ? 'white' : '#f59e0b',
+                                            fontWeight: 700,
+                                            marginTop: 2,
+                                        })}
+                                    >
+                                        <item.icon style={{ filter: 'drop-shadow(0 0 4px rgba(245,158,11,0.8))' }} />
+                                        <span>⚡ {item.label}</span>
+                                    </NavLink>
                                 ) : (
                                     <NavLink
                                         key={item.to}

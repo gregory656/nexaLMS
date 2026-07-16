@@ -35,6 +35,7 @@ import FinancePage from './pages/finance/FinancePage';
 import DocumentationPage from './pages/documents/DocumentationPage';
 import QuotationsPage from './pages/documents/QuotationsPage';
 import SitePage from './pages/site/SitePage';
+import SuperAnalyticsPage from './pages/analytics/SuperAnalyticsPage';
 import ContactPage from './pages/site/ContactPage';
 
 // Simple placeholder pages for sections being built
@@ -125,6 +126,7 @@ export default function App() {
                 {/* Assessment — each is a full page with internal tabs */}
                 <Route path="exams" element={<ExamsPage />} />
                 <Route path="reports" element={<ReportCardsPage />} />
+                <Route path="super-analytics" element={<SuperAnalyticsPage />} />
                 <Route path="attendance" element={<AttendancePage />} />
 
                 {/* Finance */}
