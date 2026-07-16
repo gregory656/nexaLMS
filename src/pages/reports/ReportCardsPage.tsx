@@ -28,6 +28,7 @@ export default function ReportCardsPage() {
     const [subjects, setSubjects] = useState<any[]>([]);
     const [gradeScales, setGradeScales] = useState<any[]>([]);
     const [reportCards, setReportCards] = useState<any[]>([]);
+    const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]);
 
     const [selectedExam, setSelectedExam] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
@@ -39,14 +40,15 @@ export default function ReportCardsPage() {
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const [exRes, clRes, stuRes, resRes, subRes, gsRes, rcRes] = await Promise.all([
+        const [exRes, clRes, stuRes, resRes, subRes, gsRes, rcRes, taRes] = await Promise.all([
             supabase.from('exams').select('*, terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
             supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
             supabase.from('students').select('*').eq('school_id', school.id).eq('status', 'active').order('first_name'),
-            supabase.from('exam_results').select('*, subjects(name)').eq('school_id', school.id),
+            supabase.from('exam_results').select('*, subjects(name)').eq('school_id', school.id).range(0, 9999),
             supabase.from('subjects').select('*').eq('school_id', school.id).order('name'),
             supabase.from('grade_scales').select('*').eq('school_id', school.id).order('min_marks', { ascending: false }),
             supabase.from('report_cards').select('*, students(first_name, last_name, admission_number), classes(name), terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
+            supabase.from('teacher_subject_assignments').select('*, teachers(first_name, last_name)').eq('school_id', school.id),
         ]);
         setExams(exRes.data || []);
         setClasses(clRes.data || []);
@@ -55,6 +57,7 @@ export default function ReportCardsPage() {
         setSubjects(subRes.data || []);
         setGradeScales(gsRes.data || []);
         setReportCards(rcRes.data || []);
+        setTeacherAssignments(taRes.data || []);
         setLoading(false);
     };
 
@@ -63,16 +66,27 @@ export default function ReportCardsPage() {
     const classStudents = students.filter(s => s.class_id === selectedClass);
     const examResults = results.filter(r => r.exam_id === selectedExam);
 
-    const getGrade = (marks: number) => {
+    const getGrade = (marks: number | null | undefined) => {
+        if (marks === null || marks === undefined || Number.isNaN(Number(marks))) {
+            return { grade: '-', remarks: 'No mark recorded' };
+        }
+        const numericMarks = Number(marks);
         for (const gs of gradeScales) {
-            if (marks >= gs.min_marks && marks <= gs.max_marks) return gs;
+            if (numericMarks >= gs.min_marks && numericMarks <= gs.max_marks) return gs;
         }
         // Demo grade scale fallback
-        if (marks >= 80) return { grade: 'A', remarks: 'Excellent' };
-        if (marks >= 70) return { grade: 'B', remarks: 'Very Good' };
-        if (marks >= 60) return { grade: 'C', remarks: 'Good' };
-        if (marks >= 50) return { grade: 'D', remarks: 'Fair' };
+        if (numericMarks >= 80) return { grade: 'A', remarks: 'Excellent' };
+        if (numericMarks >= 70) return { grade: 'B', remarks: 'Very Good' };
+        if (numericMarks >= 60) return { grade: 'C', remarks: 'Good' };
+        if (numericMarks >= 50) return { grade: 'D', remarks: 'Fair' };
         return { grade: 'E', remarks: 'Needs Improvement' };
+    };
+
+    const getTeacherName = (subjectId: string, classId: string) => {
+        const assignment = teacherAssignments.find(item => item.subject_id === subjectId && item.class_id === classId)
+            || teacherAssignments.find(item => item.subject_id === subjectId && !item.class_id);
+        const teacher = assignment?.teachers;
+        return teacher ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() : '-';
     };
 
     const getStudentReport = (studentId: string) => {
@@ -85,16 +99,21 @@ export default function ReportCardsPage() {
                 subject_id: subject.id,
                 class_id: selectedClass,
                 exam_id: selectedExam,
-                marks: 0,
+                marks: null,
                 grade: null,
                 remarks: 'No mark recorded',
                 subjects: { name: subject.name },
+                teacher_name: getTeacherName(subject.id, selectedClass),
             };
         });
-        const total = subjectRows.reduce((s, r) => s + Number(r.marks || 0), 0);
+        const enrichedRows = subjectRows.map(row => ({
+            ...row,
+            teacher_name: row.teacher_name || getTeacherName(row.subject_id, row.class_id || selectedClass),
+        }));
+        const total = enrichedRows.reduce((s, r) => s + (r.marks == null || r.marks === '' ? 0 : Number(r.marks || 0)), 0);
         const mean = subjectRows.length ? total / subjectRows.length : 0;
         const gs = getGrade(mean);
-        return { subjects: subjectRows, total, mean, grade: gs?.grade || '-', remarks: gs?.remarks || '' };
+        return { subjects: enrichedRows, total, mean, grade: gs?.grade || '-', remarks: gs?.remarks || '' };
     };
 
     const addSubjectRanks = (subjectRows: any[]) => subjectRows.map(row => {
@@ -106,7 +125,9 @@ export default function ReportCardsPage() {
             .map((r: any) => Number(r.marks))
             .filter(m => !Number.isNaN(m))
             .sort((a, b) => b - a);
-        return { ...row, subjectRank: subjectMarks.findIndex(m => m === mark) + 1, subjectTotal: subjectMarks.length };
+        const rankIndex = subjectMarks.findIndex(m => m === mark);
+        const classMean = subjectMarks.length ? subjectMarks.reduce((sum, current) => sum + current, 0) / subjectMarks.length : null;
+        return { ...row, subjectRank: rankIndex >= 0 ? rankIndex + 1 : null, subjectTotal: subjectMarks.length, classMean };
     });
 
     const getStudentAnalytics = (studentId: string) => {
