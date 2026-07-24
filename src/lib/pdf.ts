@@ -273,11 +273,11 @@ export async function generateReportCardPdf(options: {
     const drawPerformanceChart = (chartY: number) => {
         const chartX = 14;
         const chartW = pw - 28;
-        const chartH = 32;
+        const chartH = 22;
         const plotX = chartX + 10;
-        const plotY = chartY + 6;
+        const plotY = chartY + 5;
         const plotW = chartW - 17;
-        const plotH = chartH - 14;
+        const plotH = chartH - 11;
         const rows = options.subjects.slice(0, 9);
         const shortName = (value: string) => safeText(value).replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || '-';
 
@@ -285,9 +285,9 @@ export async function generateReportCardPdf(options: {
         doc.setDrawColor(215, 222, 232);
         doc.roundedRect(chartX, chartY, chartW, chartH, 2, 2, 'FD');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.3);
+        doc.setFontSize(6.5);
         doc.setTextColor(primary[0], primary[1], primary[2]);
-        doc.text('Subject Performance Graph', chartX + 4, chartY + 4.7);
+        doc.text('Subject Performance Graph', chartX + 4, chartY + 4.2);
 
         doc.setDrawColor(205, 214, 226);
         doc.setLineWidth(0.25);
@@ -315,7 +315,7 @@ export async function generateReportCardPdf(options: {
             const cx = plotX + slot * index + slot / 2;
             doc.setFontSize(4.8);
             doc.setTextColor(muted[0], muted[1], muted[2]);
-            doc.text(shortName(row.subjects?.name || row.subject_name), cx, plotY + plotH + 5, { align: 'center' });
+            doc.text(shortName(row.subjects?.name || row.subject_name), cx, plotY + plotH + 4, { align: 'center' });
             if (mark == null || Number.isNaN(mark)) {
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(185, 28, 28);
@@ -348,13 +348,13 @@ export async function generateReportCardPdf(options: {
         }
 
         doc.setFillColor(42, 157, 143);
-        doc.rect(chartX + chartW - 44, chartY + 3, 4, 2, 'F');
+        doc.rect(chartX + chartW - 44, chartY + 2.5, 4, 2, 'F');
         doc.setTextColor(muted[0], muted[1], muted[2]);
         doc.setFontSize(5.4);
-        doc.text('Learner', chartX + chartW - 38, chartY + 4.8);
+        doc.text('Learner', chartX + chartW - 38, chartY + 4.3);
         doc.setDrawColor(245, 158, 11);
-        doc.line(chartX + chartW - 21, chartY + 4, chartX + chartW - 16, chartY + 4);
-        doc.text('Class avg', chartX + chartW - 14, chartY + 4.8);
+        doc.line(chartX + chartW - 21, chartY + 3.5, chartX + chartW - 16, chartY + 3.5);
+        doc.text('Class avg', chartX + chartW - 14, chartY + 4.3);
     };
     const themeFill = () => {
         const palette: Record<string, [number, number, number]> = {
@@ -497,8 +497,8 @@ export async function generateReportCardPdf(options: {
             ...(options.multiExamSummary.includeAverage ? ['Avg'] : []),
             'Dev',
         ];
-        const rows = options.multiExamSummary.rows.map(row => [
-            safeText(row.subject),
+        const rows = options.multiExamSummary.rows.slice(0, 8).map(row => [
+            truncateText(row.subject, 18),
             ...row.marks.slice(0, 3).map(mark => mark == null ? 'X' : Number(mark).toFixed(0)),
             ...(options.multiExamSummary?.includeAverage ? [row.average == null ? '-' : Number(row.average).toFixed(1)] : []),
             row.movement == null ? '0' : row.movement > 0 ? '^' : row.movement < 0 ? 'v' : '0',
@@ -508,16 +508,16 @@ export async function generateReportCardPdf(options: {
             head: [headers],
             body: rows,
             theme: 'grid',
-            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 6.2, halign: 'center' },
-            bodyStyles: { fontSize: 6.1, cellPadding: 0.85, textColor: ink, minCellHeight: 3.6 },
+            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 5.7, halign: 'center' },
+            bodyStyles: { fontSize: 5.6, cellPadding: 0.55, textColor: ink, minCellHeight: 2.9 },
             alternateRowStyles: { fillColor: [249, 250, 251] },
             columnStyles: {
-                0: { cellWidth: 58, fontStyle: 'bold' },
-                1: { cellWidth: 18, halign: 'center' },
-                2: { cellWidth: 18, halign: 'center' },
-                3: { cellWidth: 18, halign: 'center' },
-                4: { cellWidth: options.multiExamSummary.includeAverage ? 18 : 14, halign: 'center' },
-                5: { cellWidth: 14, halign: 'center' },
+                0: { cellWidth: 52, fontStyle: 'bold' },
+                1: { cellWidth: 16, halign: 'center' },
+                2: { cellWidth: 16, halign: 'center' },
+                3: { cellWidth: 16, halign: 'center' },
+                4: { cellWidth: options.multiExamSummary.includeAverage ? 16 : 12, halign: 'center' },
+                5: { cellWidth: 12, halign: 'center' },
             },
             margin: { left: 14, right: 14 },
             pageBreak: 'avoid',
@@ -531,22 +531,22 @@ export async function generateReportCardPdf(options: {
             .map((name, index) => `${examLabels[index]}=${truncateText(name, 25)}`)
             .join(' | ');
         doc.text(doc.splitTextToSize(examMap, pw - 28).slice(0, 2), 14, y + 2);
-        y += 7;
+        y += 5;
     }
 
-    const tableRows = options.subjects.map((result: any) => {
+    const tableRows = options.subjects.slice(0, options.multiExamSummary?.rows?.length ? 8 : 10).map((result: any) => {
         const hasMark = result.marks != null && result.marks !== '' && !Number.isNaN(Number(result.marks));
         const mark = hasMark ? Number(result.marks) : null;
         const level = cbcLevel(mark);
         const movement = result.movement == null ? '0' : Number(result.movement) > 0 ? '^' : Number(result.movement) < 0 ? 'v' : '0';
         return [
-            safeText(result.subjects?.name || result.subject_name),
+            truncateText(result.subjects?.name || result.subject_name, 18),
             hasMark ? mark!.toFixed(0) : 'X',
             movement,
             level.level,
             result.subjectRank ? `${result.subjectRank}/${result.subjectTotal || options.totalStudents || dash}` : dash,
-            safeText(result.subjectTeacherRemark || result.remarks || level.label),
-            safeText(result.teacher_name),
+            truncateText(result.subjectTeacherRemark || result.remarks || level.label, 34),
+            truncateText(result.teacher_name, 18),
         ];
     });
     (doc as any).autoTable({
@@ -554,19 +554,20 @@ export async function generateReportCardPdf(options: {
         head: [['Learning Area', 'Marks', 'Dev', 'Grade', 'Rank', 'Subject TR Remarks', 'Teacher']],
         body: tableRows,
         theme: 'grid',
-        headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', fontSize: 7.2, halign: 'center' },
-        bodyStyles: { fontSize: 7.05, cellPadding: 1.35, textColor: ink, overflow: 'linebreak' },
+        headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', fontSize: 6.1, halign: 'center' },
+        bodyStyles: { fontSize: 5.85, cellPadding: 0.75, textColor: ink, overflow: 'linebreak', minCellHeight: 3.2 },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         columnStyles: {
-            0: { cellWidth: 40, fontStyle: 'bold' },
-            1: { cellWidth: 15, halign: 'center' },
-            2: { cellWidth: 11, halign: 'center' },
-            3: { cellWidth: 15, halign: 'center', fontStyle: 'bold' },
-            4: { cellWidth: 18, halign: 'center' },
-            5: { cellWidth: 42 },
-            6: { cellWidth: 39 },
+            0: { cellWidth: 34, fontStyle: 'bold' },
+            1: { cellWidth: 13, halign: 'center' },
+            2: { cellWidth: 10, halign: 'center' },
+            3: { cellWidth: 13, halign: 'center', fontStyle: 'bold' },
+            4: { cellWidth: 16, halign: 'center' },
+            5: { cellWidth: 58 },
+            6: { cellWidth: 36 },
         },
         margin: { left: 14, right: 14 },
+        pageBreak: 'avoid',
     });
     y = doc.lastAutoTable.finalY + 5;
 
@@ -578,54 +579,46 @@ export async function generateReportCardPdf(options: {
         ? `${fullName || 'Learner'} is strongest in ${strongest} and should give extra attention to ${weakest}. Maintain daily revision and complete all practice tasks.`
         : `${fullName || 'Learner'} has no recorded marks for this assessment. Follow up with the examination office for completion.`;
 
-    if (y > 165) {
-        doc.addPage();
-        themeFill();
-        y = 16;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.setTextColor(primary[0], primary[1], primary[2]);
-        doc.text('Learner Analytics & Remarks', pw / 2, 10, { align: 'center' });
-    }
+    if (y > 173) y = 173;
 
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(215, 222, 232);
-    doc.roundedRect(14, y, pw - 28, 35, 2, 2, 'FD');
+    doc.roundedRect(14, y, pw - 28, 22, 2, 2, 'FD');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(6.8);
     doc.setTextColor(primary[0], primary[1], primary[2]);
-    doc.text('Academic Analysis', 18, y + 6);
-    doc.text('Co-curricular Indicator', 116, y + 6);
+    doc.text('Prediction', 18, y + 5);
+    doc.text('Activity Note', 116, y + 5);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
+    doc.setFontSize(5.9);
     doc.setTextColor(ink[0], ink[1], ink[2]);
-    doc.text(doc.splitTextToSize(options.prediction || advice, 88).slice(0, 4), 18, y + 12);
+    doc.text(doc.splitTextToSize(truncateText(options.prediction || advice, 130), 88).slice(0, 3), 18, y + 10);
     const coText = `CAS supports sports and arts; English supports debate. Rank: ${options.position || dash}/${options.totalStudents || dash}.`;
-    doc.text(doc.splitTextToSize(coText, 72).slice(0, 4), 116, y + 12);
-    y += 42;
+    doc.text(doc.splitTextToSize(coText, 72).slice(0, 3), 116, y + 10);
+    y += 25;
 
-    drawPerformanceChart(Math.min(y, 184));
+    drawPerformanceChart(Math.min(y, 198));
 
-    const remarksY = 222;
+    const remarksY = 224;
     const cardGap = 6;
     const remarkCardW = (pw - 28 - cardGap) / 2;
     const drawRemarkCard = (x: number, title: string, remark: string, name: string) => {
         doc.setFillColor(255, 255, 255);
         doc.setDrawColor(190, 202, 216);
-        doc.roundedRect(x, remarksY, remarkCardW, 31, 2, 2, 'FD');
+        doc.roundedRect(x, remarksY, remarkCardW, 24, 2, 2, 'FD');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.1);
+        doc.setFontSize(6.4);
         doc.setTextColor(primary[0], primary[1], primary[2]);
-        doc.text(title, x + 4, remarksY + 5.2);
+        doc.text(title, x + 4, remarksY + 4.8);
         doc.setFont('helvetica', 'italic');
-        doc.setFontSize(6.5);
+        doc.setFontSize(5.7);
         doc.setTextColor(ink[0], ink[1], ink[2]);
-        const quote = `"${safeText(remark, 'No remark generated.')}"`;
-        doc.text(doc.splitTextToSize(quote, remarkCardW - 8).slice(0, 3), x + 4, remarksY + 11);
+        const quote = `"${truncateText(remark, 112) || 'No remark generated.'}"`;
+        doc.text(doc.splitTextToSize(quote, remarkCardW - 8).slice(0, 3), x + 4, remarksY + 9.5);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(6.2);
+        doc.setFontSize(5.6);
         doc.setTextColor(muted[0], muted[1], muted[2]);
-        doc.text(`Name: ${safeText(name)}`, x + 4, remarksY + 27);
+        doc.text(`Name: ${truncateText(name, 30)}`, x + 4, remarksY + 21);
     };
     drawRemarkCard(14, 'Class TR Remarks', safeText(options.classTeacherRemarks), safeText(options.classTeacherName, 'Class Teacher'));
     drawRemarkCard(14 + remarkCardW + cardGap, 'Principal Remarks', safeText(options.principalRemarks), safeText(options.principalName, 'Principal'));
@@ -642,18 +635,18 @@ export async function generateReportCardPdf(options: {
         doc.text(doc.splitTextToSize(dates, pw - 60).slice(0, 2), 14, ph - 20);
     }
 
-    const sigY = 260;
-    doc.setFontSize(7.2);
+    const sigY = 253;
+    doc.setFontSize(6.6);
     doc.setTextColor(ink[0], ink[1], ink[2]);
     doc.text('Class TR Sign: ____________________', 14, sigY);
     doc.text('Principal Sign: ____________________', 78, sigY);
     doc.text('Parent/Guardian: ____________________', 138, sigY);
     doc.setDrawColor(180, 190, 205);
-    doc.roundedRect(142, 266, 28, 18, 2, 2, 'S');
+    doc.roundedRect(142, 263, 28, 15, 2, 2, 'S');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(muted[0], muted[1], muted[2]);
-    doc.text('SCHOOL STAMP', 156, 276, { align: 'center' });
+    doc.text('SCHOOL STAMP', 156, 272, { align: 'center' });
 
     doc.setDrawColor(primary[0], primary[1], primary[2]);
     doc.roundedRect(pw - 30, ph - 25, 16, 16, 1, 1, 'S');
