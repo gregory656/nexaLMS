@@ -4,6 +4,13 @@ export interface TimetableBreak {
     end_time: string;
 }
 
+export interface TimetableDoubleLessonRule {
+    teacher_id: string;
+    subject_id: string;
+    class_id: string;
+    count_per_week: number;
+}
+
 export interface TimetableSettings {
     id?: string;
     school_id: string;
@@ -20,6 +27,7 @@ export interface TimetableSettings {
     min_class_lessons_per_day: number;
     max_class_lessons_per_day: number;
     breaks: TimetableBreak[];
+    double_lessons?: TimetableDoubleLessonRule[];
 }
 
 export interface TimeSlot {
@@ -39,6 +47,8 @@ export interface LessonAssignment {
     teacher_name: string;
     subject_name: string;
     class_name: string;
+    duration_periods?: number;
+    is_double_lesson?: boolean;
 }
 
 export interface GeneratedEntry {
@@ -52,6 +62,8 @@ export interface GeneratedEntry {
     class_name?: string;
     subject_name?: string;
     teacher_name?: string;
+    duration_periods?: number;
+    is_double_lesson?: boolean;
 }
 
 export interface GenerationResult {

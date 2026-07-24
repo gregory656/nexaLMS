@@ -50,6 +50,7 @@ export default function TimetablePage() {
     const [customDays, setCustomDays] = useState<number[]>([0, 1, 2, 3, 4]);
     const [showBreakModal, setShowBreakModal] = useState(false);
     const [breakForm, setBreakForm] = useState<TimetableBreak>({ name: '', start_time: '09:20', end_time: '09:40' });
+    const [doubleLessonForm, setDoubleLessonForm] = useState({ assignment_key: '', count_per_week: '1' });
 
     const [settings, setSettings] = useState<Partial<TimetableSettings>>({
         term_name: 'Term 1',
@@ -64,6 +65,7 @@ export default function TimetablePage() {
         min_class_lessons_per_day: 4,
         max_class_lessons_per_day: 8,
         breaks: DEFAULT_BREAKS,
+        double_lessons: [],
     });
 
     const currentYear = useMemo(
@@ -82,9 +84,18 @@ export default function TimetablePage() {
     // Compute periods including breaks - use timeSlots to determine the actual number of periods
     const periods = useMemo(() => {
         if (timeSlots.length > 0) {
-            // Get unique period numbers from timeSlots
-            const uniquePeriods = [...new Set(timeSlots.map(s => s.period))];
-            return uniquePeriods.sort((a, b) => a - b);
+            const inlineBreaks = getBreakSlots(settings as TimetableSettings);
+            const combined = [...timeSlots, ...inlineBreaks];
+            const timeToMinutes = (time: string) => {
+                const [h, m] = time.split(':').map(Number);
+                return h * 60 + m;
+            };
+            const uniquePeriods = [...new Set(combined.map(s => s.period))];
+            return uniquePeriods.sort((a, b) => {
+                const slotA = combined.find(s => s.period === a);
+                const slotB = combined.find(s => s.period === b);
+                return timeToMinutes(slotA?.start_time || '00:00') - timeToMinutes(slotB?.start_time || '00:00');
+            });
         }
         const p = settings.periods_per_day || 7;
         return Array.from({ length: p }, (_, i) => i + 1);
@@ -179,6 +190,8 @@ export default function TimetablePage() {
             class_name: e.classes?.name,
             subject_name: e.subjects?.name,
             teacher_name: e.teachers ? `${e.teachers.first_name} ${e.teachers.last_name}` : '',
+            duration_periods: e.duration_periods || 1,
+            is_double_lesson: Boolean(e.is_double_lesson),
         })));
     };
 
@@ -233,6 +246,7 @@ export default function TimetablePage() {
             min_class_lessons_per_day: settings.min_class_lessons_per_day,
             max_class_lessons_per_day: settings.max_class_lessons_per_day,
             breaks: settings.breaks || [],
+            double_lessons: settings.double_lessons || [],
             updated_at: new Date().toISOString(),
         };
 
@@ -397,6 +411,8 @@ export default function TimetablePage() {
             start_time: e.start_time,
             end_time: e.end_time,
             school_id: school!.id,
+            duration_periods: e.duration_periods || 1,
+            is_double_lesson: Boolean(e.is_double_lesson),
         }));
 
         for (let i = 0; i < entryRows.length; i += ENTRY_INSERT_CHUNK_SIZE) {
@@ -489,6 +505,35 @@ export default function TimetablePage() {
         setSettings(s => ({
             ...s,
             breaks: (s.breaks || []).filter((_, i) => i !== idx),
+        }));
+    };
+
+    const addDoubleLessonRule = () => {
+        const [teacher_id, subject_id, class_id] = doubleLessonForm.assignment_key.split('|');
+        if (!teacher_id || !subject_id || !class_id) {
+            toast.error('Choose a teacher-subject-class assignment first.');
+            return;
+        }
+        const rule = {
+            teacher_id,
+            subject_id,
+            class_id,
+            count_per_week: Math.max(1, Number(doubleLessonForm.count_per_week) || 1),
+        };
+        setSettings(s => ({
+            ...s,
+            double_lessons: [
+                ...(s.double_lessons || []).filter(item => !(item.teacher_id === teacher_id && item.subject_id === subject_id && item.class_id === class_id)),
+                rule,
+            ],
+        }));
+        setDoubleLessonForm({ assignment_key: '', count_per_week: '1' });
+    };
+
+    const removeDoubleLessonRule = (idx: number) => {
+        setSettings(s => ({
+            ...s,
+            double_lessons: (s.double_lessons || []).filter((_, i) => i !== idx),
         }));
     };
 
@@ -686,6 +731,57 @@ export default function TimetablePage() {
                                 </table>
                             </div>
                         )}
+                    </div>
+
+                    <div className="card" style={{ gridColumn: 'span 2' }}>
+                        <div className="card-header">
+                            <h3 className="card-title">Double Lesson Setup</h3>
+                        </div>
+                        <div style={{ padding: '1rem' }}>
+                            <div className="grid-3">
+                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                    <label className="form-label">Teacher / Subject / Class</label>
+                                    <select className="form-select" value={doubleLessonForm.assignment_key}
+                                        onChange={e => setDoubleLessonForm(f => ({ ...f, assignment_key: e.target.value }))}>
+                                        <option value="">Choose assignment</option>
+                                        {assignments.filter(a => a.class_id && a.teacher_id && a.subject_id).map(a => (
+                                            <option key={a.id} value={`${a.teacher_id}|${a.subject_id}|${a.class_id}`}>
+                                                {a.subjects?.name} - {a.classes?.name} - {a.teachers?.first_name} {a.teachers?.last_name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Double Lessons / Week</label>
+                                    <input type="number" min={1} max={5} className="form-input" value={doubleLessonForm.count_per_week}
+                                        onChange={e => setDoubleLessonForm(f => ({ ...f, count_per_week: e.target.value }))} />
+                                </div>
+                            </div>
+                            <button className="btn btn-secondary btn-sm" onClick={addDoubleLessonRule}>
+                                <Plus size={14} /> Add Double Lesson
+                            </button>
+                            {(settings.double_lessons || []).length > 0 && (
+                                <div className="table-wrapper mt-4">
+                                    <table className="data-table">
+                                        <thead><tr><th>Subject</th><th>Class</th><th>Teacher</th><th>Count</th><th></th></tr></thead>
+                                        <tbody>
+                                            {(settings.double_lessons || []).map((rule, i) => {
+                                                const assignment = assignments.find(a => a.teacher_id === rule.teacher_id && a.subject_id === rule.subject_id && a.class_id === rule.class_id);
+                                                return (
+                                                    <tr key={`${rule.teacher_id}-${rule.subject_id}-${rule.class_id}`}>
+                                                        <td>{assignment?.subjects?.name || 'Subject'}</td>
+                                                        <td>{assignment?.classes?.name || 'Class'}</td>
+                                                        <td>{assignment?.teachers ? `${assignment.teachers.first_name} ${assignment.teachers.last_name}` : 'Teacher'}</td>
+                                                        <td><span className="badge badge-blue">{rule.count_per_week}</span></td>
+                                                        <td><button className="btn btn-ghost btn-sm" onClick={() => removeDoubleLessonRule(i)}><Trash2 size={14} /></button></td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="card" style={{ gridColumn: 'span 2' }}>

@@ -144,19 +144,6 @@ function MiniBar({ value, max = 100, color = '#125E52', label }: any) {
 
 // ── CBC Level Badge Chip ──────────────────────────────────────────────────
 
-function LevelChip({ level }: { level: string }) {
-    const found = CBC_LEVELS.find(l => l.level === level);
-    if (!found || level === '-') return <span style={{ color: '#94a3b8' }}>-</span>;
-    return (
-        <span style={{
-            background: found.color + '18', color: found.color, border: `1px solid ${found.color}40`,
-            borderRadius: 5, padding: '0.1rem 0.45rem', fontSize: '0.72rem', fontWeight: 700
-        }}>
-            {level}
-        </span>
-    );
-}
-
 // ── Main Page Component ───────────────────────────────────────────────────
 
 export default function SuperAnalyticsPage() {

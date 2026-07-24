@@ -24,6 +24,7 @@ const navSections = [
             { to: '/students', icon: GraduationCap, label: 'Students' },
             { to: '/student-leaders', icon: Shield, label: 'Student Leaders' },
             { to: '/staff', icon: Users, label: 'Staff / Teachers' },
+            { to: '/class-trs', icon: UserCheck, label: 'Class TRs' },
             { to: '/duty-roster', icon: ClipboardList, label: 'Duty Roster' },
             { to: '/guardians', icon: UserCheck, label: 'Guardians' },
             { to: '/alumni', icon: GraduationCap, label: 'Alumni' },
@@ -38,6 +39,7 @@ const navSections = [
             { to: '/academics/years', icon: Calendar, label: 'Academic Years' },
             { to: '/academics/departments', icon: BarChart3, label: 'Departments' },
             { to: '/academics/timetable', icon: Clock, label: 'Timetable' },
+            { to: '/learning-teaching', icon: BookOpen, label: 'Learning & Teaching' },
         ]
     },
     {

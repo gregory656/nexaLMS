@@ -225,6 +225,20 @@ export async function generateReportCardPdf(options: {
         improvement?: number | null;
     };
     theme?: string;
+    classTeacherName?: string;
+    principalName?: string;
+    classTeacherRemarks?: string;
+    principalRemarks?: string;
+    prediction?: string;
+    closingDate?: string;
+    openingDate?: string;
+    upcomingEvents?: string;
+    reportVersion?: number;
+    multiExamSummary?: {
+        examNames: string[];
+        rows: { subject: string; marks: (number | null)[]; average?: number | null; movement?: number | null }[];
+        includeAverage: boolean;
+    };
 }): Promise<jsPDF> {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pw = doc.internal.pageSize.getWidth();
@@ -466,23 +480,50 @@ export async function generateReportCardPdf(options: {
     });
     y += 22;
 
+    if (options.multiExamSummary?.rows?.length) {
+        const headers = [
+            'Learning Area',
+            ...options.multiExamSummary.examNames.slice(0, 3),
+            ...(options.multiExamSummary.includeAverage ? ['Avg'] : []),
+            'Dev',
+        ];
+        const rows = options.multiExamSummary.rows.map(row => [
+            safeText(row.subject),
+            ...row.marks.slice(0, 3).map(mark => mark == null ? 'X' : Number(mark).toFixed(0)),
+            ...(options.multiExamSummary?.includeAverage ? [row.average == null ? '-' : Number(row.average).toFixed(1)] : []),
+            row.movement == null ? '0' : row.movement > 0 ? '^' : row.movement < 0 ? 'v' : '0',
+        ]);
+        (doc as any).autoTable({
+            startY: y,
+            head: [headers],
+            body: rows,
+            theme: 'grid',
+            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 6.8, halign: 'center' },
+            bodyStyles: { fontSize: 6.8, cellPadding: 1.1, textColor: ink },
+            columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' } },
+            margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 4;
+    }
+
     const tableRows = options.subjects.map((result: any) => {
         const hasMark = result.marks != null && result.marks !== '' && !Number.isNaN(Number(result.marks));
         const mark = hasMark ? Number(result.marks) : null;
         const level = cbcLevel(mark);
+        const movement = result.movement == null ? '0' : Number(result.movement) > 0 ? '^' : Number(result.movement) < 0 ? 'v' : '0';
         return [
             safeText(result.subjects?.name || result.subject_name),
             hasMark ? mark!.toFixed(0) : 'X',
-            '0',
+            movement,
             level.level,
             result.subjectRank ? `${result.subjectRank}/${result.subjectTotal || options.totalStudents || dash}` : dash,
-            level.label,
+            safeText(result.subjectTeacherRemark || result.remarks || level.label),
             safeText(result.teacher_name),
         ];
     });
     (doc as any).autoTable({
         startY: y,
-        head: [['Learning Area', 'Marks', 'Dev', 'Grade', 'Rank', 'Performance Level', 'Teacher']],
+        head: [['Learning Area', 'Marks', 'Dev', 'Grade', 'Rank', 'Subject TR Remarks', 'Teacher']],
         body: tableRows,
         theme: 'grid',
         headStyles: { fillColor: primary, textColor: 255, fontStyle: 'bold', fontSize: 7.2, halign: 'center' },
@@ -520,18 +561,48 @@ export async function generateReportCardPdf(options: {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(ink[0], ink[1], ink[2]);
-    doc.text(doc.splitTextToSize(advice, 88).slice(0, 4), 18, y + 12);
+    doc.text(doc.splitTextToSize(options.prediction || advice, 88).slice(0, 4), 18, y + 12);
     const coText = `CAS supports sports and arts; English supports debate. Rank: ${options.position || dash}/${options.totalStudents || dash}.`;
     doc.text(doc.splitTextToSize(coText, 72).slice(0, 4), 116, y + 12);
     y += 42;
 
-    drawPerformanceChart(Math.min(y, 221));
+    drawPerformanceChart(Math.min(y, 188));
 
-    const sigY = 258;
+    const remarksY = 224;
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(215, 222, 232);
+    doc.roundedRect(14, remarksY, pw - 28, 28, 2, 2, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    doc.setTextColor(primary[0], primary[1], primary[2]);
+    doc.text('Class TR Remarks', 18, remarksY + 5);
+    doc.text('Principal Remarks', 107, remarksY + 5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(ink[0], ink[1], ink[2]);
+    doc.text(doc.splitTextToSize(safeText(options.classTeacherRemarks, 'No class teacher remark generated.'), 82).slice(0, 3), 18, remarksY + 10);
+    doc.text(doc.splitTextToSize(safeText(options.principalRemarks, 'No principal remark generated.'), 82).slice(0, 3), 107, remarksY + 10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Name: ${safeText(options.classTeacherName, 'Class Teacher')}`, 18, remarksY + 24);
+    doc.text(`Name: ${safeText(options.principalName, 'Principal')}`, 107, remarksY + 24);
+
+    const dates = [
+        options.closingDate ? `Closing: ${safeText(options.closingDate)}` : '',
+        options.openingDate ? `Opening: ${safeText(options.openingDate)}` : '',
+        options.upcomingEvents ? `Events: ${safeText(options.upcomingEvents)}` : '',
+    ].filter(Boolean).join(' | ');
+    if (dates) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.2);
+        doc.setTextColor(muted[0], muted[1], muted[2]);
+        doc.text(doc.splitTextToSize(dates, pw - 28).slice(0, 2), 14, 255);
+    }
+
+    const sigY = 264;
     doc.setFontSize(7.2);
     doc.setTextColor(ink[0], ink[1], ink[2]);
-    doc.text('Class Teacher: ____________________', 14, sigY);
-    doc.text('Principal: ____________________', 78, sigY);
+    doc.text('Class TR Sign: ____________________', 14, sigY);
+    doc.text('Principal Sign: ____________________', 78, sigY);
     doc.text('Parent/Guardian: ____________________', 138, sigY);
     doc.setDrawColor(180, 190, 205);
     doc.roundedRect(142, 266, 28, 18, 2, 2, 'S');
@@ -549,7 +620,7 @@ export async function generateReportCardPdf(options: {
     doc.setFontSize(6.5);
     doc.setTextColor(muted[0], muted[1], muted[2]);
     doc.text(`Verify: ${verificationCode}`, 14, ph - 14);
-    doc.text(`Generated by Nexalms | Report v1 | ${new Date().toLocaleDateString('en-GB')} | (c) Nexagen Technologies Ltd`, 14, ph - 8);
+    doc.text(`Generated by Nexalms | Report v${options.reportVersion || 2} | ${new Date().toLocaleDateString('en-GB')} | (c) Nexagen Technologies Ltd`, 14, ph - 8);
 
     return doc;
 

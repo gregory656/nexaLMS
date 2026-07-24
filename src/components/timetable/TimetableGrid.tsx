@@ -29,6 +29,7 @@ export default function TimetableGrid({
     viewType, 
     breaks = [], 
     timeSlots,
+    breakSlots,
     classes = [],
 }: TimetableGridProps) {
     
@@ -40,6 +41,7 @@ export default function TimetableGrid({
             periods={periods} 
             breaks={breaks}
             timeSlots={timeSlots}
+            breakSlots={breakSlots}
             classes={classes}
         />;
     }
@@ -52,6 +54,7 @@ export default function TimetableGrid({
         viewType={viewType}
         breaks={breaks}
         timeSlots={timeSlots}
+        breakSlots={breakSlots}
     />;
 }
 
@@ -65,6 +68,7 @@ function MasterTimetableView({
     periods, 
     breaks,
     timeSlots,
+    breakSlots,
     classes 
 }: { 
     entries: GeneratedEntry[]; 
@@ -72,6 +76,7 @@ function MasterTimetableView({
     periods: number[];
     breaks: TimetableBreak[];
     timeSlots: TimeSlot[] | undefined;
+    breakSlots: TimeSlot[] | undefined;
     classes: { id: string; name: string }[];
 }) {
     
@@ -87,6 +92,16 @@ function MasterTimetableView({
     
     // Get period time label
     const getPeriodLabel = (period: number): { label: string; isBreak: boolean; breakName?: string; breakTime?: string } => {
+        const breakSlot = breakSlots?.find(s => s.period === period && s.day === workingDays[0]);
+        if (breakSlot) {
+            const breakInfo = breaks.find(b => b.start_time === breakSlot.start_time && b.end_time === breakSlot.end_time);
+            return {
+                label: `${formatTime12h(breakSlot.start_time)} - ${formatTime12h(breakSlot.end_time)}`,
+                isBreak: true,
+                breakName: breakInfo?.name || 'Break',
+                breakTime: `${formatTime12h(breakSlot.start_time)} - ${formatTime12h(breakSlot.end_time)}`,
+            };
+        }
         if (timeSlots && timeSlots.length > 0) {
             const slot = timeSlots.find(s => s.period === period && s.day === workingDays[0]);
             if (slot) {
@@ -156,7 +171,7 @@ function MasterTimetableView({
                                                 <td key={period} className="tt-cell">
                                                     {entry ? (
                                                         <div className="tt-lesson-block">
-                                                            <div className="tt-subject">{entry.subject_name}</div>
+                                                            <div className="tt-subject">{entry.subject_name}{entry.is_double_lesson ? ' (Double)' : ''}</div>
                                                             <div className="tt-teacher">{entry.teacher_name}</div>
                                                         </div>
                                                     ) : (
@@ -186,7 +201,8 @@ function WeeklyTimetableView({
     periods,
     viewType,
     breaks,
-    timeSlots
+    timeSlots,
+    breakSlots
 }: { 
     entries: GeneratedEntry[]; 
     workingDays: number[]; 
@@ -194,6 +210,7 @@ function WeeklyTimetableView({
     viewType: 'teacher' | 'class';
     breaks: TimetableBreak[];
     timeSlots: TimeSlot[] | undefined;
+    breakSlots: TimeSlot[] | undefined;
 }) {
     
     // Get entry for specific period and day
@@ -203,6 +220,12 @@ function WeeklyTimetableView({
     
     // Get period time and break info
     const getPeriodInfo = (period: number): { time: string; isBreak: boolean; breakName?: string; breakTime?: string } => {
+        const breakSlot = breakSlots?.find(s => s.period === period && s.day === workingDays[0]);
+        if (breakSlot) {
+            const breakInfo = breaks.find(b => b.start_time === breakSlot.start_time && b.end_time === breakSlot.end_time);
+            const time = `${formatTime12h(breakSlot.start_time)} - ${formatTime12h(breakSlot.end_time)}`;
+            return { time, isBreak: true, breakName: breakInfo?.name || 'Break', breakTime: time };
+        }
         if (timeSlots && timeSlots.length > 0) {
             const slot = timeSlots.find(s => s.period === period && s.day === workingDays[0]);
             if (slot) {
@@ -271,7 +294,7 @@ function WeeklyTimetableView({
                                         <td key={day} className="tt-cell">
                                             {entry ? (
                                                 <div className="tt-lesson-block">
-                                                    <div className="tt-subject">{entry.subject_name}</div>
+                                                    <div className="tt-subject">{entry.subject_name}{entry.is_double_lesson ? ' (Double)' : ''}</div>
                                                     {viewType === 'teacher' && entry.class_name && (
                                                         <div className="tt-class">{entry.class_name}</div>
                                                     )}

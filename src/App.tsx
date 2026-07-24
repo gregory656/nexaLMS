@@ -18,6 +18,8 @@ import StudentsPage from './pages/students/StudentsPage';
 import StudentLeadersPage from './pages/students/StudentLeadersPage';
 import StaffPage from './pages/staff/StaffPage';
 import DutyRosterPage from './pages/staff/DutyRosterPage';
+import ClassTeachersPage from './pages/staff/ClassTeachersPage';
+import LearningTeachingPage from './pages/learning/LearningTeachingPage';
 import GuardiansPage from './pages/guardians/GuardiansPage';
 import StreamsPage from './pages/academics/StreamsPage';
 import SubjectsPage from './pages/academics/SubjectsPage';
@@ -111,6 +113,7 @@ export default function App() {
                 <Route path="students" element={<StudentsPage />} />
                 <Route path="student-leaders" element={<StudentLeadersPage />} />
                 <Route path="staff" element={<StaffPage />} />
+                <Route path="class-trs" element={<ClassTeachersPage />} />
                 <Route path="duty-roster" element={<DutyRosterPage />} />
                 <Route path="guardians" element={<GuardiansPage />} />
                 <Route path="alumni" element={<AlumniPage />} />
@@ -122,6 +125,7 @@ export default function App() {
                 <Route path="academics/years" element={<AcademicYearsPage />} />
                 <Route path="academics/departments" element={<DepartmentsPage />} />
                 <Route path="academics/timetable" element={<TimetablePage />} />
+                <Route path="learning-teaching" element={<LearningTeachingPage />} />
 
                 {/* Assessment — each is a full page with internal tabs */}
                 <Route path="exams" element={<ExamsPage />} />

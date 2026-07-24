@@ -8,6 +8,13 @@ import {
     GraduationCap, Activity, Target, MessageSquare
 } from 'lucide-react';
 import HelpIcon from '../../components/ui/HelpIcon';
+import {
+    classTeacherRemark,
+    movementSymbol,
+    predictionForStudent,
+    principalRemark,
+    subjectTeacherRemark,
+} from '../../lib/reports/reportRemarks';
 
 const TABS = [
     { key: 'generate', label: 'Generate', icon: FileText },
@@ -29,12 +36,19 @@ export default function ReportCardsPage() {
     const [gradeScales, setGradeScales] = useState<any[]>([]);
     const [reportCards, setReportCards] = useState<any[]>([]);
     const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]);
+    const [classTeacherAssignments, setClassTeacherAssignments] = useState<any[]>([]);
 
     const [selectedExam, setSelectedExam] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
     const [selectedStudent, setSelectedStudent] = useState('');
     const [selectedTheme, setSelectedTheme] = useState('Classic White');
     const [includeFeeBalance, setIncludeFeeBalance] = useState(false);
+    const [multiExamMode, setMultiExamMode] = useState(false);
+    const [includeMultiAverage, setIncludeMultiAverage] = useState(true);
+    const [multiExamIds, setMultiExamIds] = useState<string[]>([]);
+    const [closingDate, setClosingDate] = useState('');
+    const [openingDate, setOpeningDate] = useState('');
+    const [upcomingEvents, setUpcomingEvents] = useState('');
     const [downloading, setDownloading] = useState(false);
 
     const fetchExamResults = async () => {
@@ -57,15 +71,16 @@ export default function ReportCardsPage() {
     const fetchAll = async () => {
         if (!school?.id) return;
         setLoading(true);
-        const [exRes, clRes, stuRes, resRes, subRes, gsRes, rcRes, taRes] = await Promise.all([
+        const [exRes, clRes, stuRes, resRes, subRes, gsRes, rcRes, taRes, ctRes] = await Promise.all([
             supabase.from('exams').select('*, terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
-            supabase.from('classes').select('*, grade_levels(name), streams(name)').eq('school_id', school.id).order('name'),
+            supabase.from('classes').select('*, grade_levels(name), streams(name), teachers(first_name, last_name)').eq('school_id', school.id).order('name'),
             supabase.from('students').select('*').eq('school_id', school.id).eq('status', 'active').order('first_name'),
             fetchExamResults(),
             supabase.from('subjects').select('*').eq('school_id', school.id).order('name'),
             supabase.from('grade_scales').select('*').eq('school_id', school.id).order('min_marks', { ascending: false }),
             supabase.from('report_cards').select('*, students(first_name, last_name, admission_number), classes(name), terms(name), academic_years(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
             supabase.from('teacher_subject_assignments').select('*, teachers(first_name, last_name)').eq('school_id', school.id),
+            supabase.from('class_teacher_assignments').select('*, teachers(first_name, last_name), classes(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
         ]);
         setExams(exRes.data || []);
         setClasses(clRes.data || []);
@@ -75,6 +90,7 @@ export default function ReportCardsPage() {
         setGradeScales(gsRes.data || []);
         setReportCards(rcRes.data || []);
         setTeacherAssignments(taRes.data || []);
+        setClassTeacherAssignments(ctRes.data || []);
         setLoading(false);
     };
 
@@ -95,6 +111,16 @@ export default function ReportCardsPage() {
 
     const classStudents = students.filter(s => s.class_id === selectedClass);
     const examResults = results.filter(r => r.exam_id === selectedExam);
+    const suggestedMultiExams = exams
+        .filter(exam => results.some(r => r.exam_id === exam.id && (!selectedClass || r.class_id === selectedClass)))
+        .slice(0, 3);
+
+    useEffect(() => {
+        if (!multiExamMode || multiExamIds.length || suggestedMultiExams.length === 0) return;
+        const ids = suggestedMultiExams.map(exam => exam.id);
+        setMultiExamIds(ids);
+        if (!selectedExam && ids[0]) setSelectedExam(ids[0]);
+    }, [multiExamMode, selectedClass, suggestedMultiExams.length]);
 
     const getGrade = (marks: number | null | undefined) => {
         if (marks === null || marks === undefined || Number.isNaN(Number(marks))) {
@@ -119,6 +145,17 @@ export default function ReportCardsPage() {
         return teacher ? `${teacher.first_name || ''} ${teacher.last_name || ''}`.trim() : '-';
     };
 
+    const getClassTeacherName = (classId: string) => {
+        const assignment = classTeacherAssignments.find(item => item.class_id === classId);
+        const assigned = assignment?.teachers;
+        if (assigned) return `${assigned.first_name || ''} ${assigned.last_name || ''}`.trim();
+        const cls = classes.find(c => c.id === classId);
+        const fallback = cls?.teachers;
+        return fallback ? `${fallback.first_name || ''} ${fallback.last_name || ''}`.trim() : '';
+    };
+
+    const getPrincipalName = () => (school as any)?.principal_name || (school as any)?.head_teacher_name || (school as any)?.director_name || '';
+
     const getStudentReport = (studentId: string) => {
         const studentRes = examResults.filter(r => r.student_id === studentId);
         const subjectRows = subjects.map(subject => {
@@ -136,14 +173,25 @@ export default function ReportCardsPage() {
                 teacher_name: getTeacherName(subject.id, selectedClass),
             };
         });
-        const enrichedRows = subjectRows.map(row => ({
+        const enrichedRows = subjectRows.map((row, index) => ({
             ...row,
             teacher_name: row.teacher_name || getTeacherName(row.subject_id, row.class_id || selectedClass),
+            subjectTeacherRemark: subjectTeacherRemark(row, students.find(s => s.id === studentId) || {}, index),
+            movement: getSubjectMovement(studentId, row.subject_id, selectedExam),
         }));
         const total = enrichedRows.reduce((s, r) => s + (r.marks == null || r.marks === '' ? 0 : Number(r.marks || 0)), 0);
         const mean = subjectRows.length ? total / subjectRows.length : 0;
         const gs = getGrade(mean);
         return { subjects: enrichedRows, total, mean, grade: gs?.grade || '-', remarks: gs?.remarks || '' };
+    };
+
+    const getSubjectMovement = (studentId: string, subjectId: string, currentExamId: string) => {
+        const current = results.find(r => r.student_id === studentId && r.subject_id === subjectId && r.exam_id === currentExamId);
+        const examIndex = exams.findIndex(e => e.id === currentExamId);
+        const previousExam = exams.slice(examIndex + 1).find(ex => results.some(r => r.student_id === studentId && r.subject_id === subjectId && r.exam_id === ex.id));
+        const previous = previousExam ? results.find(r => r.student_id === studentId && r.subject_id === subjectId && r.exam_id === previousExam.id) : null;
+        if (!current || !previous) return 0;
+        return Number(current.marks || 0) - Number(previous.marks || 0);
     };
 
     const addSubjectRanks = (subjectRows: any[]) => subjectRows.map(row => {
@@ -255,6 +303,76 @@ export default function ReportCardsPage() {
         };
     };
 
+    const buildMultiExamSummary = (studentId: string) => {
+        const ids = (multiExamIds.length ? multiExamIds : suggestedMultiExams.map(e => e.id)).slice(0, 3);
+        if (!multiExamMode || ids.length < 2) return undefined;
+        const examNames = ids.map(id => exams.find(e => e.id === id)?.name || 'Exam');
+        const rows = subjects.map(subject => {
+            const marks = ids.map(id => {
+                const row = results.find(r => r.student_id === studentId && r.subject_id === subject.id && r.exam_id === id);
+                return row?.marks == null ? null : Number(row.marks);
+            });
+            const valid = marks.filter((mark): mark is number => mark != null && !Number.isNaN(mark));
+            return {
+                subject: subject.name,
+                marks,
+                average: valid.length ? valid.reduce((sum, mark) => sum + mark, 0) / valid.length : null,
+                movement: valid.length >= 2 && marks[0] != null && marks[marks.length - 1] != null ? Number(marks[0]) - Number(marks[marks.length - 1]) : 0,
+            };
+        });
+        return { examNames, rows, includeAverage: includeMultiAverage };
+    };
+
+    const buildPdfPayload = (student: any) => {
+        const report = getStudentReport(student.id);
+        const analytics = getStudentAnalytics(student.id);
+        const position = rankedStudents.findIndex(s => s.id === student.id) + 1;
+        const classTeacherName = getClassTeacherName(selectedClass);
+        const classTeacherRemarks = classTeacherRemark({
+            student,
+            mean: report.mean,
+            improvement: analytics.improvement,
+            strengths: analytics.strengths,
+            focus: analytics.focus,
+        });
+        const principalRemarks = principalRemark({
+            student,
+            mean: report.mean,
+            position,
+            totalStudents: rankedStudents.length,
+            improvement: analytics.improvement,
+        });
+        return {
+            school,
+            student,
+            exam: exams.find(e => e.id === selectedExam) || exams.find(e => e.id === multiExamIds[0]) || suggestedMultiExams[0],
+            className: classes.find(c => c.id === selectedClass)?.name || '',
+            subjects: addSubjectRanks(report.subjects),
+            total: report.total,
+            mean: report.mean,
+            grade: report.grade,
+            remarks: report.remarks,
+            feeBalance: student.fee_balance,
+            feeTimestamp: student.fee_balance_updated_at,
+            includeFeeBalance,
+            theme: selectedTheme,
+            getGrade,
+            position,
+            totalStudents: rankedStudents.length,
+            analytics,
+            classTeacherName,
+            principalName: getPrincipalName(),
+            classTeacherRemarks,
+            principalRemarks,
+            prediction: predictionForStudent({ student, mean: report.mean, classMean: analytics.classMean, improvement: analytics.improvement, focus: analytics.focus }),
+            closingDate,
+            openingDate,
+            upcomingEvents,
+            reportVersion: 2,
+            multiExamSummary: buildMultiExamSummary(student.id),
+        };
+    };
+
     // Rank students by total marks (descending)
     const rankedStudents = classStudents
         .map(s => ({ ...s, report: getStudentReport(s.id) }))
@@ -267,28 +385,7 @@ export default function ReportCardsPage() {
     const handleDownloadSingle = async (student: any) => {
         setDownloading(true);
         try {
-            const report = getStudentReport(student.id);
-            const analytics = getStudentAnalytics(student.id);
-            const position = rankedStudents.findIndex(s => s.id === student.id) + 1;
-            const doc = await generateReportCardPdf({
-                school,
-                student,
-                exam: exams.find(e => e.id === selectedExam),
-                className: classes.find(c => c.id === selectedClass)?.name || '',
-                subjects: addSubjectRanks(report.subjects),
-                total: report.total,
-                mean: report.mean,
-                grade: report.grade,
-                remarks: report.remarks,
-                feeBalance: student.fee_balance,
-                feeTimestamp: student.fee_balance_updated_at,
-                includeFeeBalance,
-                theme: selectedTheme,
-                getGrade,
-                position,
-                totalStudents: classStudents.length,
-                analytics,
-            });
+            const doc = await generateReportCardPdf(buildPdfPayload(student));
             downloadPdf(doc, `report_${student.first_name}_${student.last_name}`);
             toast.success('Report card downloaded');
         } catch (err: any) {
@@ -308,28 +405,7 @@ export default function ReportCardsPage() {
         const docs = [];
         for (const student of rankedStudents) {
             try {
-                const report = getStudentReport(student.id);
-                const analytics = getStudentAnalytics(student.id);
-                const position = rankedStudents.findIndex(s => s.id === student.id) + 1;
-                const doc = await generateReportCardPdf({
-                    school,
-                    student,
-                    exam: exams.find(e => e.id === selectedExam),
-                    className: classes.find(c => c.id === selectedClass)?.name || '',
-                    subjects: addSubjectRanks(report.subjects),
-                    total: report.total,
-                    mean: report.mean,
-                    grade: report.grade,
-                    remarks: report.remarks,
-                    feeBalance: student.fee_balance,
-                    feeTimestamp: student.fee_balance_updated_at,
-                    includeFeeBalance,
-                    theme: selectedTheme,
-                    getGrade,
-                    position,
-                    totalStudents: rankedStudents.length,
-                    analytics,
-                });
+                const doc = await generateReportCardPdf(buildPdfPayload(student));
                 docs.push(doc);
             } catch { /* skip failed */ }
         }
@@ -441,6 +517,9 @@ export default function ReportCardsPage() {
             <div className="flex justify-between items-center mb-4">
                 <div><h3 className="text-lg font-bold">Generate Report Cards</h3><p className="text-sm text-muted">Select exam and class, then preview or publish report cards.</p></div>
                 <div className="flex gap-2 items-center">
+                    <button className={`btn btn-sm ${multiExamMode ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setMultiExamMode(!multiExamMode)}>
+                        {multiExamMode ? <ToggleRight size={16} /> : <ToggleLeft size={16} />} Multi Exam
+                    </button>
                     <button className={`btn btn-sm ${includeFeeBalance ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setIncludeFeeBalance(!includeFeeBalance)}>
                         {includeFeeBalance ? <ToggleRight size={16} /> : <ToggleLeft size={16} />} Fee Balance
                     </button>
@@ -479,7 +558,52 @@ export default function ReportCardsPage() {
                             ))}
                         </select>
                     </div>
+                    <div className="form-group">
+                        <label className="form-label">Report Dates</label>
+                        <div className="grid-2">
+                            <input type="date" className="form-input" value={closingDate} onChange={e => setClosingDate(e.target.value)} title="Closing day" />
+                            <input type="date" className="form-input" value={openingDate} onChange={e => setOpeningDate(e.target.value)} title="Opening day" />
+                        </div>
+                    </div>
                 </div>
+                <div className="form-group mt-3">
+                    <label className="form-label">Upcoming Events</label>
+                    <input className="form-input" value={upcomingEvents} onChange={e => setUpcomingEvents(e.target.value)} placeholder="Sports day, parents meeting, academic clinic..." />
+                </div>
+                {multiExamMode && (
+                    <div className="mt-3" style={{ background: 'var(--green-50)', border: '1px solid var(--green-200)', borderRadius: 8, padding: '1rem' }}>
+                        <div className="flex justify-between items-center mb-3">
+                            <div>
+                                <strong>Sit tight as we check previous exams</strong>
+                                <p className="text-sm text-muted">Choose up to three exams with marks for this class. The first exam is treated as the current report exam.</p>
+                            </div>
+                            <button className={`btn btn-sm ${includeMultiAverage ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setIncludeMultiAverage(!includeMultiAverage)}>
+                                {includeMultiAverage ? <ToggleRight size={16} /> : <ToggleLeft size={16} />} Average
+                            </button>
+                        </div>
+                        {suggestedMultiExams.length === 0 ? (
+                            <p className="text-sm text-muted">No previous exam marks found for the selected class yet.</p>
+                        ) : (
+                            <div className="grid-3">
+                                {[0, 1, 2].map(index => (
+                                    <div className="form-group" key={index}>
+                                        <label className="form-label">Test {index + 1}</label>
+                                        <select className="form-select" value={multiExamIds[index] || ''} onChange={e => {
+                                            const next = [...multiExamIds];
+                                            next[index] = e.target.value;
+                                            const compact = next.filter(Boolean).slice(0, 3);
+                                            setMultiExamIds(compact);
+                                            if (index === 0) setSelectedExam(e.target.value);
+                                        }}>
+                                            <option value="">Select exam</option>
+                                            {suggestedMultiExams.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                                        </select>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Preview Card */}
@@ -514,13 +638,13 @@ export default function ReportCardsPage() {
 
                     <div className="table-wrapper mb-4">
                         <table className="data-table">
-                            <thead><tr><th>Subject</th><th>Marks</th><th>Grade</th><th>Remarks</th></tr></thead>
+                            <thead><tr><th>Subject</th><th>Marks</th><th>Dev</th><th>Grade</th><th>Subject TR Remarks</th></tr></thead>
                             <tbody>
                                 {previewStudent.report.subjects.length === 0 ? (
-                                    <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-400)' }}>No results found for this student.</td></tr>
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--gray-400)' }}>No results found for this student.</td></tr>
                                 ) : previewStudent.report.subjects.map((r: any, i: number) => {
                                     const gs = getGrade(Number(r.marks));
-                                    return <tr key={i}><td>{r.subjects?.name || '-'}</td><td><strong>{r.marks ?? 0}</strong></td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : '-'}</td><td className="text-sm text-muted">{r.remarks || '-'}</td></tr>;
+                                    return <tr key={i}><td>{r.subjects?.name || '-'}</td><td><strong>{r.marks ?? 0}</strong></td><td>{movementSymbol(r.movement)}</td><td>{gs ? <span className="badge badge-green">{gs.grade}</span> : '-'}</td><td className="text-sm text-muted">{r.subjectTeacherRemark || r.remarks || '-'}</td></tr>;
                                 })}
                             </tbody>
                         </table>
@@ -552,8 +676,8 @@ export default function ReportCardsPage() {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '1px solid var(--gray-200)', paddingTop: '1rem', marginTop: '1.5rem' }}>
                         <div style={{ fontSize: '0.82rem' }}>
-                            <p><strong>Class Teacher:</strong> _______________</p>
-                            <p style={{ marginTop: 4 }}><strong>Principal:</strong> _______________</p>
+                            <p><strong>Class TR:</strong> {getClassTeacherName(selectedClass) || '_______________'}</p>
+                            <p style={{ marginTop: 4 }}><strong>Principal:</strong> {getPrincipalName() || '_______________'}</p>
                         </div>
                         <div className="flex gap-2">
                             <button className="btn btn-primary btn-sm" onClick={() => handleDownloadSingle(previewStudent)} disabled={downloading}>

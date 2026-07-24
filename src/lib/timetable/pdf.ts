@@ -47,6 +47,13 @@ function formatDate() {
 }
 
 function getPeriodInfo(options: PdfOptions, period: number, day?: number) {
+    if (period >= 100) {
+        const breakInfo = options.breaks?.[period - 100];
+        if (breakInfo) {
+            const time = `${formatTime12h(breakInfo.start_time)} - ${formatTime12h(breakInfo.end_time)}`;
+            return { label: breakInfo.name, time, isBreak: true };
+        }
+    }
     const slot = options.timeSlots?.find(s =>
         s.period === period && s.day === (day ?? options.workingDays[0])
     );
@@ -92,11 +99,13 @@ function buildMasterTableHtml(options: PdfOptions): string {
                     e.class_id === cls.id && e.day_of_week === day && e.period_number === period
                 );
 
+                const periodInfo = getPeriodInfo(options, period, day);
+                if (periodInfo.isBreak) return `<td class="break-cell">${escapeHtml(periodInfo.label)}<span>${escapeHtml(periodInfo.time)}</span></td>`;
                 if (!entry) return `<td>${emptyCell()}</td>`;
 
                 return `<td>
                     <div class="lesson">
-                        <strong>${escapeHtml(entry.subject_name)}</strong>
+                        <strong>${escapeHtml(entry.subject_name)}${entry.is_double_lesson ? ' (Double)' : ''}</strong>
                         <em>${escapeHtml(entry.teacher_name)}</em>
                     </div>
                 </td>`;
@@ -124,8 +133,10 @@ function buildWeeklyTableHtml(options: PdfOptions): string {
         const cells = workingDays.map(day => {
             const entry = entries.find(x => x.period_number === period && x.day_of_week === day);
             const secondaryText = viewType === 'teacher' ? entry?.class_name : entry?.teacher_name;
-            const cell = entry
-                ? `<strong>${escapeHtml(entry.subject_name)}</strong><br><em>${escapeHtml(secondaryText)}</em>`
+            const cell = periodInfo.isBreak
+                ? `<strong>${escapeHtml(periodInfo.label)}</strong><br><em>${escapeHtml(periodInfo.time)}</em>`
+                : entry
+                ? `<strong>${escapeHtml(entry.subject_name)}${entry.is_double_lesson ? ' (Double)' : ''}</strong><br><em>${escapeHtml(secondaryText)}</em>`
                 : emptyCell();
 
             return `<td>${cell}</td>`;
@@ -168,6 +179,7 @@ export async function downloadTimetablePdf(options: PdfOptions): Promise<void> {
   th span { display: block; margin-top: 2px; font-size: 8px; font-weight: 400; }
   td { border: 1px solid #d1d5db; padding: 6px 4px; text-align: center; vertical-align: middle; min-height: 40px; }
   td.period, td.row-header { background: #f3f4f6; font-weight: 700; width: 90px; }
+  .break-cell, tr:has(td.period strong) td { background: #ecfdf5; color: #065f46; font-weight: 700; }
   .day-section { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px; }
   .lesson { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px dashed #e5e7eb; }
   .lesson:last-child { border-bottom: none; }

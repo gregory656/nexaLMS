@@ -102,6 +102,7 @@ const MAX_PLACEMENT_CHECKS = 250_000;
 type LessonTask = LessonAssignment & {
     lessonNumber: number;
     totalForAssignment: number;
+    durationPeriods: number;
 };
 
 function incrementNestedCount(map: Map<string, Map<number, number>>, id: string, day: number) {
@@ -179,13 +180,21 @@ export function generateTimetable(input: GeneratorInput): GenerationResult {
         return { success: false, entries: [], errors: capacityErrors };
     }
 
-    const tasks: LessonTask[] = usableAssignments.flatMap(assignment =>
-        Array.from({ length: assignment.lessons_per_week }, (_, lessonNumber) => ({
+    const tasks: LessonTask[] = usableAssignments.flatMap(assignment => {
+        const rule = (settings.double_lessons || []).find(item =>
+            item.teacher_id === assignment.teacher_id &&
+            item.subject_id === assignment.subject_id &&
+            item.class_id === assignment.class_id
+        );
+        const doubleCount = Math.max(0, Math.min(Math.floor(rule?.count_per_week || 0), Math.floor(assignment.lessons_per_week / 2)));
+        const taskCount = assignment.lessons_per_week - doubleCount;
+        return Array.from({ length: taskCount }, (_, lessonNumber) => ({
             ...assignment,
             lessonNumber,
             totalForAssignment: assignment.lessons_per_week,
-        }))
-    );
+            durationPeriods: lessonNumber < doubleCount ? 2 : 1,
+        }));
+    });
     const totalLessons = tasks.length;
     let bestEntries: GenerationResult['entries'] = [];
     let bestMissingTasks: LessonTask[] = tasks;
@@ -233,8 +242,14 @@ export function generateTimetable(input: GeneratorInput): GenerationResult {
             for (const slot of attemptSlots) {
                 placementChecks++;
                 if (placementChecks > MAX_PLACEMENT_CHECKS) break;
-                if (teacherSchedule.get(task.teacher_id)?.has(slot.key)) continue;
-                if (classSchedule.get(task.class_id)?.has(slot.key)) continue;
+                const taskSlots = [slot];
+                if (task.durationPeriods > 1) {
+                    const nextSlot = attemptSlots.find(s => s.day === slot.day && s.period === slot.period + 1);
+                    if (!nextSlot) continue;
+                    taskSlots.push(nextSlot);
+                }
+                if (taskSlots.some(item => teacherSchedule.get(task.teacher_id)?.has(item.key))) continue;
+                if (taskSlots.some(item => classSchedule.get(task.class_id)?.has(item.key))) continue;
                 if (getNestedCount(teacherDailyCount, task.teacher_id, slot.day) >= settings.max_teacher_lessons_per_day) continue;
                 if (getNestedCount(classDailyCount, task.class_id, slot.day) >= settings.max_class_lessons_per_day) continue;
 
@@ -259,10 +274,17 @@ export function generateTimetable(input: GeneratorInput): GenerationResult {
 
             if (!teacherSchedule.has(task.teacher_id)) teacherSchedule.set(task.teacher_id, new Set());
             if (!classSchedule.has(task.class_id)) classSchedule.set(task.class_id, new Set());
-            teacherSchedule.get(task.teacher_id)!.add(bestSlot.key);
-            classSchedule.get(task.class_id)!.add(bestSlot.key);
-            incrementNestedCount(teacherDailyCount, task.teacher_id, bestSlot.day);
-            incrementNestedCount(classDailyCount, task.class_id, bestSlot.day);
+            const placedSlots = [bestSlot];
+            if (task.durationPeriods > 1) {
+                const nextSlot = slots.find(s => s.day === bestSlot!.day && s.period === bestSlot!.period + 1);
+                if (nextSlot) placedSlots.push(nextSlot);
+            }
+            placedSlots.forEach(slot => {
+                teacherSchedule.get(task.teacher_id)!.add(slot.key);
+                classSchedule.get(task.class_id)!.add(slot.key);
+                incrementNestedCount(teacherDailyCount, task.teacher_id, slot.day);
+                incrementNestedCount(classDailyCount, task.class_id, slot.day);
+            });
             incrementNestedCount(classSubjectDayCount, `${task.class_id}-${task.subject_id}`, bestSlot.day);
 
             entries.push({
@@ -272,10 +294,12 @@ export function generateTimetable(input: GeneratorInput): GenerationResult {
                 day_of_week: bestSlot.day,
                 period_number: bestSlot.period,
                 start_time: bestSlot.start_time,
-                end_time: bestSlot.end_time,
+                end_time: placedSlots[placedSlots.length - 1].end_time,
                 class_name: task.class_name,
                 subject_name: task.subject_name,
                 teacher_name: task.teacher_name,
+                duration_periods: task.durationPeriods,
+                is_double_lesson: task.durationPeriods > 1,
             });
             progress(entries.length);
         }
