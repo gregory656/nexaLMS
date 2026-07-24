@@ -8,7 +8,10 @@ export interface TimetableDoubleLessonRule {
     teacher_id: string;
     subject_id: string;
     class_id: string;
-    count_per_week: number;
+    day_of_week: number;
+    start_time: string;
+    end_time: string;
+    count_per_week?: number;
 }
 
 export interface TimetableSettings {

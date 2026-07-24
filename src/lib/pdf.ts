@@ -234,8 +234,10 @@ export async function generateReportCardPdf(options: {
     openingDate?: string;
     upcomingEvents?: string;
     reportVersion?: number;
+    schoolUsername?: string;
     multiExamSummary?: {
         examNames: string[];
+        examLabels?: string[];
         rows: { subject: string; marks: (number | null)[]; average?: number | null; movement?: number | null }[];
         includeAverage: boolean;
     };
@@ -249,6 +251,10 @@ export async function generateReportCardPdf(options: {
     const safeText = (value: any, fallback = dash) => {
         const text = value == null || value === '' ? fallback : String(value);
         return text.replace(/â€”/g, '-').replace(/â†’/g, '->');
+    };
+    const truncateText = (value: any, max = 28) => {
+        const text = safeText(value, '');
+        return text.length > max ? `${text.slice(0, max - 3)}...` : text;
     };
     const cbcLevel = (marks: number | null | undefined) => {
         if (marks == null || Number.isNaN(Number(marks))) {
@@ -408,6 +414,7 @@ export async function generateReportCardPdf(options: {
     doc.setTextColor(muted[0], muted[1], muted[2]);
     const schoolDetails = [
         options.school?.motto,
+        options.schoolUsername ? `App login: ${options.schoolUsername}` : null,
         options.school?.address,
         options.school?.phone,
         options.school?.email,
@@ -481,9 +488,12 @@ export async function generateReportCardPdf(options: {
     y += 22;
 
     if (options.multiExamSummary?.rows?.length) {
+        const examLabels = options.multiExamSummary.examLabels?.length
+            ? options.multiExamSummary.examLabels.slice(0, 3)
+            : options.multiExamSummary.examNames.slice(0, 3).map((_, index) => `Test ${index + 1}`);
         const headers = [
             'Learning Area',
-            ...options.multiExamSummary.examNames.slice(0, 3),
+            ...examLabels,
             ...(options.multiExamSummary.includeAverage ? ['Avg'] : []),
             'Dev',
         ];
@@ -498,12 +508,30 @@ export async function generateReportCardPdf(options: {
             head: [headers],
             body: rows,
             theme: 'grid',
-            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 6.8, halign: 'center' },
-            bodyStyles: { fontSize: 6.8, cellPadding: 1.1, textColor: ink },
-            columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' } },
+            headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 6.2, halign: 'center' },
+            bodyStyles: { fontSize: 6.1, cellPadding: 0.85, textColor: ink, minCellHeight: 3.6 },
+            alternateRowStyles: { fillColor: [249, 250, 251] },
+            columnStyles: {
+                0: { cellWidth: 58, fontStyle: 'bold' },
+                1: { cellWidth: 18, halign: 'center' },
+                2: { cellWidth: 18, halign: 'center' },
+                3: { cellWidth: 18, halign: 'center' },
+                4: { cellWidth: options.multiExamSummary.includeAverage ? 18 : 14, halign: 'center' },
+                5: { cellWidth: 14, halign: 'center' },
+            },
             margin: { left: 14, right: 14 },
+            pageBreak: 'avoid',
         });
-        y = doc.lastAutoTable.finalY + 4;
+        y = doc.lastAutoTable.finalY + 2;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(5.6);
+        doc.setTextColor(muted[0], muted[1], muted[2]);
+        const examMap = options.multiExamSummary.examNames
+            .slice(0, 3)
+            .map((name, index) => `${examLabels[index]}=${truncateText(name, 25)}`)
+            .join(' | ');
+        doc.text(doc.splitTextToSize(examMap, pw - 28).slice(0, 2), 14, y + 2);
+        y += 7;
     }
 
     const tableRows = options.subjects.map((result: any) => {
@@ -550,6 +578,16 @@ export async function generateReportCardPdf(options: {
         ? `${fullName || 'Learner'} is strongest in ${strongest} and should give extra attention to ${weakest}. Maintain daily revision and complete all practice tasks.`
         : `${fullName || 'Learner'} has no recorded marks for this assessment. Follow up with the examination office for completion.`;
 
+    if (y > 165) {
+        doc.addPage();
+        themeFill();
+        y = 16;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(primary[0], primary[1], primary[2]);
+        doc.text('Learner Analytics & Remarks', pw / 2, 10, { align: 'center' });
+    }
+
     doc.setFillColor(248, 250, 252);
     doc.setDrawColor(215, 222, 232);
     doc.roundedRect(14, y, pw - 28, 35, 2, 2, 'FD');
@@ -566,25 +604,31 @@ export async function generateReportCardPdf(options: {
     doc.text(doc.splitTextToSize(coText, 72).slice(0, 4), 116, y + 12);
     y += 42;
 
-    drawPerformanceChart(Math.min(y, 188));
+    drawPerformanceChart(Math.min(y, 184));
 
-    const remarksY = 224;
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(215, 222, 232);
-    doc.roundedRect(14, remarksY, pw - 28, 28, 2, 2, 'FD');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.2);
-    doc.setTextColor(primary[0], primary[1], primary[2]);
-    doc.text('Class TR Remarks', 18, remarksY + 5);
-    doc.text('Principal Remarks', 107, remarksY + 5);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.setTextColor(ink[0], ink[1], ink[2]);
-    doc.text(doc.splitTextToSize(safeText(options.classTeacherRemarks, 'No class teacher remark generated.'), 82).slice(0, 3), 18, remarksY + 10);
-    doc.text(doc.splitTextToSize(safeText(options.principalRemarks, 'No principal remark generated.'), 82).slice(0, 3), 107, remarksY + 10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Name: ${safeText(options.classTeacherName, 'Class Teacher')}`, 18, remarksY + 24);
-    doc.text(`Name: ${safeText(options.principalName, 'Principal')}`, 107, remarksY + 24);
+    const remarksY = 222;
+    const cardGap = 6;
+    const remarkCardW = (pw - 28 - cardGap) / 2;
+    const drawRemarkCard = (x: number, title: string, remark: string, name: string) => {
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(190, 202, 216);
+        doc.roundedRect(x, remarksY, remarkCardW, 31, 2, 2, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.1);
+        doc.setTextColor(primary[0], primary[1], primary[2]);
+        doc.text(title, x + 4, remarksY + 5.2);
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(6.5);
+        doc.setTextColor(ink[0], ink[1], ink[2]);
+        const quote = `"${safeText(remark, 'No remark generated.')}"`;
+        doc.text(doc.splitTextToSize(quote, remarkCardW - 8).slice(0, 3), x + 4, remarksY + 11);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.2);
+        doc.setTextColor(muted[0], muted[1], muted[2]);
+        doc.text(`Name: ${safeText(name)}`, x + 4, remarksY + 27);
+    };
+    drawRemarkCard(14, 'Class TR Remarks', safeText(options.classTeacherRemarks), safeText(options.classTeacherName, 'Class Teacher'));
+    drawRemarkCard(14 + remarkCardW + cardGap, 'Principal Remarks', safeText(options.principalRemarks), safeText(options.principalName, 'Principal'));
 
     const dates = [
         options.closingDate ? `Closing: ${safeText(options.closingDate)}` : '',
@@ -595,10 +639,10 @@ export async function generateReportCardPdf(options: {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.2);
         doc.setTextColor(muted[0], muted[1], muted[2]);
-        doc.text(doc.splitTextToSize(dates, pw - 28).slice(0, 2), 14, 255);
+        doc.text(doc.splitTextToSize(dates, pw - 60).slice(0, 2), 14, ph - 20);
     }
 
-    const sigY = 264;
+    const sigY = 260;
     doc.setFontSize(7.2);
     doc.setTextColor(ink[0], ink[1], ink[2]);
     doc.text('Class TR Sign: ____________________', 14, sigY);
@@ -619,8 +663,8 @@ export async function generateReportCardPdf(options: {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     doc.setTextColor(muted[0], muted[1], muted[2]);
-    doc.text(`Verify: ${verificationCode}`, 14, ph - 14);
-    doc.text(`Generated by Nexalms | Report v${options.reportVersion || 2} | ${new Date().toLocaleDateString('en-GB')} | (c) Nexagen Technologies Ltd`, 14, ph - 8);
+    doc.text(`Verify: ${verificationCode} | School: ${safeText(options.schoolUsername, 'N/A')}`, 14, ph - 14);
+    doc.text(`Closing/Opening above | Generated by Nexalms | Report v${options.reportVersion || 2} | ${new Date().toLocaleDateString('en-GB')} | (c) Nexagen Technologies Ltd`, 14, ph - 8);
 
     return doc;
 

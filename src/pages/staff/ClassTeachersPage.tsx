@@ -12,6 +12,7 @@ export default function ClassTeachersPage() {
     const [classes, setClasses] = useState<any[]>([]);
     const [assignments, setAssignments] = useState<any[]>([]);
     const [principalName, setPrincipalName] = useState('');
+    const [mobileUsername, setMobileUsername] = useState('');
     const [form, setForm] = useState({ teacher_id: '', class_id: '' });
 
     const fetchAll = async () => {
@@ -21,7 +22,7 @@ export default function ClassTeachersPage() {
             supabase.from('teachers').select('*').eq('school_id', school.id).eq('status', 'active').order('first_name'),
             supabase.from('classes').select('*').eq('school_id', school.id).order('name'),
             supabase.from('class_teacher_assignments').select('*, teachers(first_name, last_name), classes(name)').eq('school_id', school.id).order('created_at', { ascending: false }),
-            supabase.from('schools').select('principal_name').eq('id', school.id).maybeSingle(),
+            supabase.from('schools').select('principal_name, mobile_username, email').eq('id', school.id).maybeSingle(),
         ]);
         if (teacherRes.error) toast.error(teacherRes.error.message);
         if (classRes.error) toast.error(classRes.error.message);
@@ -30,6 +31,8 @@ export default function ClassTeachersPage() {
         setClasses(classRes.data || []);
         setAssignments(assignmentRes.data || []);
         setPrincipalName((schoolRes.data as any)?.principal_name || '');
+        const schoolRow = schoolRes.data as any;
+        setMobileUsername(schoolRow?.mobile_username || (schoolRow?.email ? `@${String(schoolRow.email).split('@')[0]}` : ''));
         setLoading(false);
     };
 
@@ -38,10 +41,14 @@ export default function ClassTeachersPage() {
     const savePrincipal = async () => {
         if (!school?.id) return;
         setSaving(true);
-        const { error } = await supabase.from('schools').update({ principal_name: principalName.trim() || null }).eq('id', school.id);
+        const username = mobileUsername.trim().startsWith('@') ? mobileUsername.trim() : `@${mobileUsername.trim()}`;
+        const { error } = await supabase.from('schools').update({
+            principal_name: principalName.trim() || null,
+            mobile_username: username === '@' ? null : username.toLowerCase(),
+        }).eq('id', school.id);
         setSaving(false);
         if (error) toast.error(error.message);
-        else toast.success('Principal name saved');
+        else toast.success('Report card identity saved');
     };
 
     const saveAssignment = async () => {
@@ -87,14 +94,19 @@ export default function ClassTeachersPage() {
 
             <div className="grid-2">
                 <div className="card">
-                    <div className="card-header"><h3 className="card-title">Principal</h3></div>
+                    <div className="card-header"><h3 className="card-title">Report Card Identity</h3></div>
                     <div style={{ padding: '1rem' }}>
                         <div className="form-group">
                             <label className="form-label">Principal Name</label>
                             <input className="form-input" value={principalName} onChange={e => setPrincipalName(e.target.value)} placeholder="e.g. Mrs Jane Wanjiku" />
                         </div>
+                        <div className="form-group">
+                            <label className="form-label">School App Username</label>
+                            <input className="form-input" value={mobileUsername} onChange={e => setMobileUsername(e.target.value)} placeholder="@schoolname" />
+                            <p className="text-xs text-muted mt-1">This prints on report cards and will be used by parents, students, and teachers to log in to Nexa School.</p>
+                        </div>
                         <button className="btn btn-primary" onClick={savePrincipal} disabled={saving}>
-                            <Save size={16} /> Save Principal
+                            <Save size={16} /> Save Identity
                         </button>
                     </div>
                 </div>

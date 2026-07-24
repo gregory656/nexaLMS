@@ -155,6 +155,12 @@ export default function ReportCardsPage() {
     };
 
     const getPrincipalName = () => (school as any)?.principal_name || (school as any)?.head_teacher_name || (school as any)?.director_name || '';
+    const getSchoolUsername = () => {
+        const saved = (school as any)?.mobile_username;
+        if (saved) return saved;
+        const email = (school as any)?.email;
+        return email ? `@${String(email).split('@')[0]}` : '';
+    };
 
     const getStudentReport = (studentId: string) => {
         const studentRes = examResults.filter(r => r.student_id === studentId);
@@ -307,6 +313,7 @@ export default function ReportCardsPage() {
         const ids = (multiExamIds.length ? multiExamIds : suggestedMultiExams.map(e => e.id)).slice(0, 3);
         if (!multiExamMode || ids.length < 2) return undefined;
         const examNames = ids.map(id => exams.find(e => e.id === id)?.name || 'Exam');
+        const examLabels = ids.map((_, index) => `Test ${index + 1}`);
         const rows = subjects.map(subject => {
             const marks = ids.map(id => {
                 const row = results.find(r => r.student_id === studentId && r.subject_id === subject.id && r.exam_id === id);
@@ -320,7 +327,7 @@ export default function ReportCardsPage() {
                 movement: valid.length >= 2 && marks[0] != null && marks[marks.length - 1] != null ? Number(marks[0]) - Number(marks[marks.length - 1]) : 0,
             };
         });
-        return { examNames, rows, includeAverage: includeMultiAverage };
+        return { examNames, examLabels, rows, includeAverage: includeMultiAverage };
     };
 
     const buildPdfPayload = (student: any) => {
@@ -369,6 +376,7 @@ export default function ReportCardsPage() {
             openingDate,
             upcomingEvents,
             reportVersion: 2,
+            schoolUsername: getSchoolUsername(),
             multiExamSummary: buildMultiExamSummary(student.id),
         };
     };

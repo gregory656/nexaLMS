@@ -50,7 +50,12 @@ export default function TimetablePage() {
     const [customDays, setCustomDays] = useState<number[]>([0, 1, 2, 3, 4]);
     const [showBreakModal, setShowBreakModal] = useState(false);
     const [breakForm, setBreakForm] = useState<TimetableBreak>({ name: '', start_time: '09:20', end_time: '09:40' });
-    const [doubleLessonForm, setDoubleLessonForm] = useState({ assignment_key: '', count_per_week: '1' });
+    const [doubleLessonForm, setDoubleLessonForm] = useState({
+        assignment_key: '',
+        day_of_week: '0',
+        start_time: '08:00',
+        end_time: '09:20',
+    });
 
     const [settings, setSettings] = useState<Partial<TimetableSettings>>({
         term_name: 'Term 1',
@@ -514,20 +519,31 @@ export default function TimetablePage() {
             toast.error('Choose a teacher-subject-class assignment first.');
             return;
         }
+        if (doubleLessonForm.start_time >= doubleLessonForm.end_time) {
+            toast.error('Double lesson end time must be after start time.');
+            return;
+        }
         const rule = {
             teacher_id,
             subject_id,
             class_id,
-            count_per_week: Math.max(1, Number(doubleLessonForm.count_per_week) || 1),
+            day_of_week: Number(doubleLessonForm.day_of_week),
+            start_time: doubleLessonForm.start_time,
+            end_time: doubleLessonForm.end_time,
         };
         setSettings(s => ({
             ...s,
             double_lessons: [
-                ...(s.double_lessons || []).filter(item => !(item.teacher_id === teacher_id && item.subject_id === subject_id && item.class_id === class_id)),
+                ...(s.double_lessons || []).filter(item => !(
+                    item.teacher_id === teacher_id &&
+                    item.subject_id === subject_id &&
+                    item.class_id === class_id &&
+                    item.day_of_week === Number(doubleLessonForm.day_of_week)
+                )),
                 rule,
             ],
         }));
-        setDoubleLessonForm({ assignment_key: '', count_per_week: '1' });
+        setDoubleLessonForm({ assignment_key: '', day_of_week: '0', start_time: '08:00', end_time: '09:20' });
     };
 
     const removeDoubleLessonRule = (idx: number) => {
@@ -739,7 +755,7 @@ export default function TimetablePage() {
                         </div>
                         <div style={{ padding: '1rem' }}>
                             <div className="grid-3">
-                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                <div className="form-group">
                                     <label className="form-label">Teacher / Subject / Class</label>
                                     <select className="form-select" value={doubleLessonForm.assignment_key}
                                         onChange={e => setDoubleLessonForm(f => ({ ...f, assignment_key: e.target.value }))}>
@@ -752,9 +768,22 @@ export default function TimetablePage() {
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Double Lessons / Week</label>
-                                    <input type="number" min={1} max={5} className="form-input" value={doubleLessonForm.count_per_week}
-                                        onChange={e => setDoubleLessonForm(f => ({ ...f, count_per_week: e.target.value }))} />
+                                    <label className="form-label">Day</label>
+                                    <select className="form-select" value={doubleLessonForm.day_of_week}
+                                        onChange={e => setDoubleLessonForm(f => ({ ...f, day_of_week: e.target.value }))}>
+                                        {(settings.working_days || [0, 1, 2, 3, 4]).map(day => (
+                                            <option key={day} value={day}>{DAY_LABELS[day]}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Time From / To</label>
+                                    <div className="grid-2">
+                                        <input type="time" className="form-input" value={doubleLessonForm.start_time}
+                                            onChange={e => setDoubleLessonForm(f => ({ ...f, start_time: e.target.value }))} />
+                                        <input type="time" className="form-input" value={doubleLessonForm.end_time}
+                                            onChange={e => setDoubleLessonForm(f => ({ ...f, end_time: e.target.value }))} />
+                                    </div>
                                 </div>
                             </div>
                             <button className="btn btn-secondary btn-sm" onClick={addDoubleLessonRule}>
@@ -763,16 +792,18 @@ export default function TimetablePage() {
                             {(settings.double_lessons || []).length > 0 && (
                                 <div className="table-wrapper mt-4">
                                     <table className="data-table">
-                                        <thead><tr><th>Subject</th><th>Class</th><th>Teacher</th><th>Count</th><th></th></tr></thead>
+                                        <thead><tr><th>Subject</th><th>Class</th><th>Teacher</th><th>Day</th><th>From</th><th>To</th><th></th></tr></thead>
                                         <tbody>
                                             {(settings.double_lessons || []).map((rule, i) => {
                                                 const assignment = assignments.find(a => a.teacher_id === rule.teacher_id && a.subject_id === rule.subject_id && a.class_id === rule.class_id);
                                                 return (
-                                                    <tr key={`${rule.teacher_id}-${rule.subject_id}-${rule.class_id}`}>
+                                                    <tr key={`${rule.teacher_id}-${rule.subject_id}-${rule.class_id}-${rule.day_of_week}`}>
                                                         <td>{assignment?.subjects?.name || 'Subject'}</td>
                                                         <td>{assignment?.classes?.name || 'Class'}</td>
                                                         <td>{assignment?.teachers ? `${assignment.teachers.first_name} ${assignment.teachers.last_name}` : 'Teacher'}</td>
-                                                        <td><span className="badge badge-blue">{rule.count_per_week}</span></td>
+                                                        <td><span className="badge badge-blue">{DAY_LABELS[rule.day_of_week]}</span></td>
+                                                        <td>{rule.start_time}</td>
+                                                        <td>{rule.end_time}</td>
                                                         <td><button className="btn btn-ghost btn-sm" onClick={() => removeDoubleLessonRule(i)}><Trash2 size={14} /></button></td>
                                                     </tr>
                                                 );

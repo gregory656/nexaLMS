@@ -105,6 +105,14 @@ type LessonTask = LessonAssignment & {
     durationPeriods: number;
 };
 
+type PinnedLesson = LessonAssignment & {
+    day_of_week: number;
+    start_time: string;
+    end_time: string;
+    period_number: number;
+    durationPeriods: number;
+};
+
 function incrementNestedCount(map: Map<string, Map<number, number>>, id: string, day: number) {
     if (!map.has(id)) map.set(id, new Map());
     const dayMap = map.get(id)!;
@@ -180,19 +188,48 @@ export function generateTimetable(input: GeneratorInput): GenerationResult {
         return { success: false, entries: [], errors: capacityErrors };
     }
 
-    const tasks: LessonTask[] = usableAssignments.flatMap(assignment => {
-        const rule = (settings.double_lessons || []).find(item =>
-            item.teacher_id === assignment.teacher_id &&
-            item.subject_id === assignment.subject_id &&
-            item.class_id === assignment.class_id
+    const pinnedLessons: PinnedLesson[] = [];
+    const pinnedLessonLoad = new Map<string, number>();
+    for (const rule of settings.double_lessons || []) {
+        const assignment = usableAssignments.find(item =>
+            item.teacher_id === rule.teacher_id &&
+            item.subject_id === rule.subject_id &&
+            item.class_id === rule.class_id
         );
-        const doubleCount = Math.max(0, Math.min(Math.floor(rule?.count_per_week || 0), Math.floor(assignment.lessons_per_week / 2)));
-        const taskCount = assignment.lessons_per_week - doubleCount;
+        if (!assignment) continue;
+        const coveredSlots = slots
+            .filter(slot =>
+                slot.day === rule.day_of_week &&
+                timeToMinutes(slot.start_time) >= timeToMinutes(rule.start_time) &&
+                timeToMinutes(slot.end_time) <= timeToMinutes(rule.end_time)
+            )
+            .sort((a, b) => a.period - b.period);
+        if (coveredSlots.length === 0) {
+            errors.push(`Double lesson for ${assignment.subject_name} (${assignment.class_name}) does not match any timetable period.`);
+            continue;
+        }
+        const key = `${assignment.class_id}-${assignment.subject_id}-${assignment.teacher_id}`;
+        pinnedLessonLoad.set(key, (pinnedLessonLoad.get(key) || 0) + coveredSlots.length);
+        pinnedLessons.push({
+            ...assignment,
+            day_of_week: rule.day_of_week,
+            start_time: coveredSlots[0].start_time,
+            end_time: coveredSlots[coveredSlots.length - 1].end_time,
+            period_number: coveredSlots[0].period,
+            durationPeriods: coveredSlots.length,
+        });
+    }
+    if (errors.length > 0) return { success: false, entries: [], errors };
+
+    const tasks: LessonTask[] = usableAssignments.flatMap(assignment => {
+        const key = `${assignment.class_id}-${assignment.subject_id}-${assignment.teacher_id}`;
+        const pinnedLoad = pinnedLessonLoad.get(key) || 0;
+        const taskCount = Math.max(0, assignment.lessons_per_week - pinnedLoad);
         return Array.from({ length: taskCount }, (_, lessonNumber) => ({
             ...assignment,
             lessonNumber,
             totalForAssignment: assignment.lessons_per_week,
-            durationPeriods: lessonNumber < doubleCount ? 2 : 1,
+            durationPeriods: 1,
         }));
     });
     const totalLessons = tasks.length;
@@ -227,6 +264,37 @@ export function generateTimetable(input: GeneratorInput): GenerationResult {
         const classSubjectDayCount = new Map<string, Map<number, number>>();
         const attemptSlots = orderedSlotsForAttempt(attempt);
         const missingTasks: LessonTask[] = [];
+
+        for (const pinned of pinnedLessons) {
+            const coveredSlots = slots.filter(slot =>
+                slot.day === pinned.day_of_week &&
+                timeToMinutes(slot.start_time) >= timeToMinutes(pinned.start_time) &&
+                timeToMinutes(slot.end_time) <= timeToMinutes(pinned.end_time)
+            );
+            if (!teacherSchedule.has(pinned.teacher_id)) teacherSchedule.set(pinned.teacher_id, new Set());
+            if (!classSchedule.has(pinned.class_id)) classSchedule.set(pinned.class_id, new Set());
+            coveredSlots.forEach(slot => {
+                teacherSchedule.get(pinned.teacher_id)!.add(slot.key);
+                classSchedule.get(pinned.class_id)!.add(slot.key);
+                incrementNestedCount(teacherDailyCount, pinned.teacher_id, slot.day);
+                incrementNestedCount(classDailyCount, pinned.class_id, slot.day);
+            });
+            incrementNestedCount(classSubjectDayCount, `${pinned.class_id}-${pinned.subject_id}`, pinned.day_of_week);
+            entries.push({
+                class_id: pinned.class_id,
+                subject_id: pinned.subject_id,
+                teacher_id: pinned.teacher_id,
+                day_of_week: pinned.day_of_week,
+                period_number: pinned.period_number,
+                start_time: pinned.start_time,
+                end_time: pinned.end_time,
+                class_name: pinned.class_name,
+                subject_name: pinned.subject_name,
+                teacher_name: pinned.teacher_name,
+                duration_periods: pinned.durationPeriods,
+                is_double_lesson: true,
+            });
+        }
 
         const orderedTasks = [...tasks].sort((a, b) => {
             if (b.totalForAssignment !== a.totalForAssignment) return b.totalForAssignment - a.totalForAssignment;

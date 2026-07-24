@@ -173,6 +173,9 @@ function MasterTimetableView({
                                                         <div className="tt-lesson-block">
                                                             <div className="tt-subject">{entry.subject_name}{entry.is_double_lesson ? ' (Double)' : ''}</div>
                                                             <div className="tt-teacher">{entry.teacher_name}</div>
+                                                            {entry.is_double_lesson && (
+                                                                <div className="tt-period-time">{formatTime12h(entry.start_time)} - {formatTime12h(entry.end_time)}</div>
+                                                            )}
                                                         </div>
                                                     ) : (
                                                         <span className="tt-empty">—</span>
@@ -295,6 +298,9 @@ function WeeklyTimetableView({
                                             {entry ? (
                                                 <div className="tt-lesson-block">
                                                     <div className="tt-subject">{entry.subject_name}{entry.is_double_lesson ? ' (Double)' : ''}</div>
+                                                    {entry.is_double_lesson && (
+                                                        <div className="tt-period-time">{formatTime12h(entry.start_time)} - {formatTime12h(entry.end_time)}</div>
+                                                    )}
                                                     {viewType === 'teacher' && entry.class_name && (
                                                         <div className="tt-class">{entry.class_name}</div>
                                                     )}
